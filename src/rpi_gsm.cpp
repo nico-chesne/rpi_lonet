@@ -9,6 +9,9 @@
 #include <iostream>
 #include <unistd.h>
 #include <LinuxGpio.h>
+#include <GsmLine.h>
+#include <GsmAnswer.h>
+#include <Sms.h>
 
 using namespace std;
 
