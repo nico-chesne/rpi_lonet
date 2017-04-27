@@ -36,6 +36,35 @@ int Serial::readData(char *buf, size_t n)
 	return read(tty_fd, buf, n);
 }
 
+int Serial::selectData(unsigned int timeout_ms)
+{
+	int            n;
+	fd_set         input;
+	struct timeval timeout;
+
+	/* Initialize the input set */
+	FD_ZERO(&input);
+	FD_SET(tty_fd, &input);
+
+	/* Initialize the timeout structure */
+	timeout.tv_sec  = timeout_ms / 1000;
+	timeout.tv_usec = (timeout_ms % 1000) * 1000;
+
+	/* Do the select */
+	n = select(tty_fd + 1, &input, NULL, NULL, &timeout);
+
+	/* See if there was an error */
+	if (n < 0)
+	{
+	  perror("select failed");
+	  return -1;
+	}
+	else
+	{
+	  return FD_ISSET(tty_fd, &input);
+	}
+}
+
 int Serial::printf(char *format, ...)
 {
 	va_list argList;

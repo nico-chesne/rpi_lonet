@@ -26,6 +26,7 @@ public :
 	int put(char c);
 	int put(char *c, int n);
 	int readData(char *buf, size_t n);
+	int selectData(unsigned int timeout_ms);
 	int printf(char *format, ...);
 	int setBlocking(bool b);
 	int closePort();

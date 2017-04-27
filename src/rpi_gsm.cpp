@@ -42,42 +42,48 @@ int main(int argc, char **argv)
 	{
 		Serial serial("/dev/ttyAMA0", 115200);
 		char c;
-		int count = 0;
+		int has_data = 0;
+		while (serial.selectData(100) > 0)
+		{
+			serial.readData(&c, 1);
+			printf("%c", c);
+		}
 
 		serial.printf("AT\r\n");
-		usleep(5);
-		while (count < 10)
+		usleep(1000);
+		while (serial.selectData(100) > 0)
 		{
-			if (serial.readData(&c, 1) > 0)
-				printf("%c", c);
-			else {
-				count++;
-				usleep(50000);
-			}
+			serial.readData(&c, 1);
+			printf("%c", c);
 		}
-		serial.printf("AT0\r\n");
-		usleep(5);
-		count = 0;
-		while (count < 10)
+		serial.printf("ATE0\r\n");
+		usleep(1000);
+		while (serial.selectData(100) > 0)
 		{
-			if (serial.readData(&c, 1) > 0)
-				printf("%c", c);
-			else {
-				count++;
-				usleep(50000);
-			}
+			serial.readData(&c, 1);
+			printf("%c", c);
 		}
+
 		serial.printf("AT+CGMI\r\n");
-		usleep(5);
-		count = 0;
-		while (count < 10)
+		usleep(1000);
+		while (serial.selectData(100) > 0)
 		{
-			if (serial.readData(&c, 1) > 0)
-				printf("%c", c);
-			else {
-				count++;
-				usleep(50000);
-			}
+			serial.readData(&c, 1);
+			printf("%c", c);
+		}
+		serial.printf("AT+CPIN=1234\r\n");
+		usleep(6000*1000);
+		while (serial.selectData(100) > 0)
+		{
+			serial.readData(&c, 1);
+			printf("%c", c);
+		}
+		serial.printf("AT+COPS?\r\n");
+		usleep(6000*1000);
+		while (serial.selectData(100) > 0)
+		{
+			serial.readData(&c, 1);
+			printf("%c", c);
 		}
 
 	}

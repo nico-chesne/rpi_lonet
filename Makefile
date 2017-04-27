@@ -4,6 +4,8 @@ CC = g++
 LD = ld
 
 INCLUDE=inc/
+RPI="pi@192.168.0.145"
+PATH_ON_RPI=/home/pi/gsm
 
 CFLAGS = -g -O0 -I$(INCLUDE) -std=c++11
 LDFLAGS = -lpthread
@@ -25,6 +27,7 @@ $(TARGET): $(OBJECTS)
 
 sync:
 	scp -r Makefile inc src $(RPI_USER)@$(RPI_IP):$(RPI_DIR)
+	ssh  "$(RPI)" -t "make -C $(PATH_ON_RPI)"
 	
 
 clean:
