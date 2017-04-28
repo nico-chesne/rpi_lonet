@@ -65,7 +65,7 @@ int Serial::selectData(unsigned int timeout_ms)
 	}
 }
 
-int Serial::printf(char *format, ...)
+int Serial::printfData(char *format, ...)
 {
 	va_list argList;
 	char *buf;
@@ -79,6 +79,102 @@ int Serial::printf(char *format, ...)
 		res = put(buf, n);
 		free(buf);
 	}
+	return res;
+}
+
+int Serial::flush(unsigned int timeout_ms)
+{
+	char c;
+	while (selectData(timeout_ms) > 0)
+	{
+		readData(&c, 1);
+	}
+	return 0;
+}
+
+#define GSM_LINE_MAX_LENGTH 192
+GsmLine *Serial::readGsmLine(unsigned int timeout_ms)
+{
+	GsmLine *res = NULL;
+	char *tmp = NULL, c;
+	int pos = 0;
+	ReadStatus_t status = READ_GETTING_LINE;
+
+	// Allocate temp buf;
+	if ((tmp = (char*)malloc(GSM_LINE_MAX_LENGTH)) == 0)
+	{
+		printf("%s(): Cannot allocate memory\n", __func__);
+		return NULL;
+	}
+	memset(tmp, 0, GSM_LINE_MAX_LENGTH);
+
+	// Read all chars from serial
+	while (selectData(timeout_ms) > 0)
+	{
+		readData(&c, 1);
+		switch (status)
+		{
+		case READ_GETTING_LINE:
+			// Getting a new char
+			if (c == CR)
+				status = READ_GOT_CR;
+			else if (c != LF) {
+				status = READ_GETTING_LINE;
+				tmp[pos++] = c;
+			} else {
+				// if got LF: parse error
+				printf("%s():%d Parse error: unexpected char LF without CR before\n", __func__, __LINE__);
+			}
+			break;
+
+		case READ_GOT_CR:
+			// End of line, we can add line to GsmAnswer or create it if NULL
+			if (c == LF) {
+				if (strlen(tmp) != 0) {
+					if (res == NULL) {
+						res = new GsmLine(tmp);
+					}
+					else {
+						res->append(tmp);
+					}
+					status = READ_GOT_LF;
+				} else {
+					// We drop empty line and we go back to start of line
+					//printf("%s():%d: Got empty line\n", __func__, __LINE__);
+					status = READ_GETTING_LINE;
+					break;
+				}
+				// Let's authorize a second CR after CR, Lonet seems to double it sometimes
+			} else if (c != CR) {
+				printf("%s():%d: Parse error. Unexpected char '%c' after CR\n", __func__, __LINE__, c);
+			}
+			break;
+
+		case READ_GOT_LF:
+			// Starting a new line
+			pos = 0;
+			memset(tmp, 0, GSM_LINE_MAX_LENGTH);
+			status = READ_GETTING_LINE;
+
+			// Getting a new char
+			if (c == CR)
+				status = READ_GOT_CR;
+			else if (c != LF) {
+				status = READ_GETTING_LINE;
+				tmp[pos++] = c;
+			} else {
+				// if got LF: parse error
+				printf("%s():%d Parse error: unexpected char LF at beginning of line\n", __func__, __LINE__);
+			}
+			break;
+
+		default:
+			printf("%s()%d unexpected parse status 0x%x\n", __func__, __LINE__, status);
+			break;
+		}
+	}
+
+	free(tmp);
 	return res;
 }
 

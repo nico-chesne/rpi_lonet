@@ -41,49 +41,53 @@ int main(int argc, char **argv)
 	if (!strcmp(argv[1], "read"))
 	{
 		Serial serial("/dev/ttyAMA0", 115200);
-		char c;
-		int has_data = 0;
-		while (serial.selectData(100) > 0)
-		{
-			serial.readData(&c, 1);
-			printf("%c", c);
+		GsmLine *lines = NULL;
+
+		serial.flush(100);
+
+		serial.printfData("AT\r\n");
+		usleep(200);
+		lines = serial.readGsmLine(100);
+		if (lines) {
+			lines->displayAll(std::cout);
+			delete lines;
+		}
+		serial.printfData("ATE0\r\n");
+		usleep(200);
+		lines = serial.readGsmLine(100);
+		if (lines) {
+			lines->displayAll(std::cout);
+			delete lines;
 		}
 
-		serial.printf("AT\r\n");
-		usleep(1000);
-		while (serial.selectData(100) > 0)
-		{
-			serial.readData(&c, 1);
-			printf("%c", c);
-		}
-		serial.printf("ATE0\r\n");
-		usleep(1000);
-		while (serial.selectData(100) > 0)
-		{
-			serial.readData(&c, 1);
-			printf("%c", c);
+		serial.printfData("AT+CGMI\r\n");
+		usleep(200);
+		lines = serial.readGsmLine(100);
+		if (lines) {
+			lines->displayAll(std::cout);
+			delete lines;
 		}
 
-		serial.printf("AT+CGMI\r\n");
-		usleep(1000);
-		while (serial.selectData(100) > 0)
-		{
-			serial.readData(&c, 1);
-			printf("%c", c);
-		}
-		serial.printf("AT+CPIN=1234\r\n");
+		serial.printfData("AT+CPIN=1234\r\n");
 		usleep(6000*1000);
-		while (serial.selectData(100) > 0)
-		{
-			serial.readData(&c, 1);
-			printf("%c", c);
+		lines = serial.readGsmLine(100);
+		if (lines) {
+			lines->displayAll(std::cout);
+			delete lines;
 		}
-		serial.printf("AT+COPS?\r\n");
-		usleep(6000*1000);
-		while (serial.selectData(100) > 0)
-		{
-			serial.readData(&c, 1);
-			printf("%c", c);
+		serial.printfData("AT+COPS?\r\n");
+		usleep(200);
+		lines = serial.readGsmLine(100);
+		if (lines) {
+			lines->displayAll(std::cout);
+			delete lines;
+		}
+		serial.printfData("AT+CBC\r\n");
+		usleep(200);
+		lines = serial.readGsmLine(100);
+		if (lines) {
+			lines->displayAll(std::cout);
+			delete lines;
 		}
 
 	}

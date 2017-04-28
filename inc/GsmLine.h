@@ -151,7 +151,6 @@ public:
     if (!res)  return NULL;
     while (t) {
       strcat(res, t->getData());
-      res[strlen(res)] = CR;
       res[strlen(res)] = LF;
       t = t->getNext();
     }
@@ -163,7 +162,7 @@ public:
     GsmLine *t = this;
     while (t) {
       if (t->strLength())
-        s << t->getData() << CR << LF;
+        s << t->getData() << LF;
       t = t->getNext();
     }
   }
