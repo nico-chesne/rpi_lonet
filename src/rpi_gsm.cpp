@@ -10,9 +10,9 @@
 #include <unistd.h>
 #include <LinuxGpio.h>
 #include <GsmLine.h>
-#include <GsmAnswer.h>
 #include <Sms.h>
 #include <Serial.h>
+#include "../inc/GsmCommand.h"
 
 using namespace std;
 
@@ -41,56 +41,34 @@ int main(int argc, char **argv)
 	if (!strcmp(argv[1], "read"))
 	{
 		Serial serial("/dev/ttyAMA0", 115200);
-		GsmLine *lines = NULL;
+		GsmCommand cmd("AT", &serial);
 
 		serial.flush(100);
 
-		serial.printfData("AT\r\n");
-		usleep(200);
-		lines = serial.readGsmLine(100);
-		if (lines) {
-			lines->displayAll(std::cout);
-			delete lines;
-		}
-		serial.printfData("ATE0\r\n");
-		usleep(200);
-		lines = serial.readGsmLine(100);
-		if (lines) {
-			lines->displayAll(std::cout);
-			delete lines;
-		}
+		cmd.process(200, 100);
+		cmd.display(std::cout);
 
-		serial.printfData("AT+CGMI\r\n");
-		usleep(200);
-		lines = serial.readGsmLine(100);
-		if (lines) {
-			lines->displayAll(std::cout);
-			delete lines;
-		}
+		cmd.setCmd("ATE0");
+		cmd.process(200, 100);
+		cmd.display(std::cout);
 
-		serial.printfData("AT+CPIN=1234\r\n");
-		usleep(6000*1000);
-		lines = serial.readGsmLine(100);
-		if (lines) {
-			lines->displayAll(std::cout);
-			delete lines;
-		}
-		serial.printfData("AT+COPS?\r\n");
-		usleep(200);
-		lines = serial.readGsmLine(100);
-		if (lines) {
-			lines->displayAll(std::cout);
-			delete lines;
-		}
-		serial.printfData("AT+CBC\r\n");
-		usleep(200);
-		lines = serial.readGsmLine(100);
-		if (lines) {
-			lines->displayAll(std::cout);
-			delete lines;
-		}
+		cmd.setCmd("AT+CGMI");
+		cmd.process(200, 100);
+		cmd.display(std::cout);
 
+		cmd.setCmd("AT+CPIN=1234");
+		cmd.process(6000*1000, 100);
+		cmd.display(std::cout);
+
+		cmd.setCmd("AT+COPS?");
+		cmd.process(200, 100);
+		cmd.display(std::cout);
+
+		cmd.setCmd("AT+CBC");
+		cmd.process(500, 200);
+		cmd.display(std::cout);
 	}
+
 
 	return 0;
 }
