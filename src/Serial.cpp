@@ -7,6 +7,9 @@
 
 
 #include "Serial.h"
+#include <iostream>
+
+using namespace std;
 
 Serial::Serial(const char *portName, speed_t speed):
 	tty_fd(-1),
@@ -76,6 +79,7 @@ int Serial::printfData(char *format, ...)
 	va_end(argList);
 	if (n > 0)
 	{
+		cout << "Sending cmd '" << buf << "'" << "\n";
 		res = put(buf, n);
 		free(buf);
 	}

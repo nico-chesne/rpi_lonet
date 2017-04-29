@@ -38,7 +38,7 @@ int main(int argc, char **argv)
 		return 0;
 	}
 
-	if (!strcmp(argv[1], "read"))
+	if (!strcmp(argv[1], "init"))
 	{
 		Serial serial("/dev/ttyAMA0", 115200);
 		GsmCommand cmd("AT", &serial);
@@ -60,6 +60,10 @@ int main(int argc, char **argv)
 		cmd.process(6000*1000, 100);
 		cmd.display(std::cout);
 
+		cmd.setCmd("AT+CMGF=1");
+		cmd.process(500, 200);
+		cmd.display(std::cout);
+
 		cmd.setCmd("AT+COPS?");
 		cmd.process(200, 100);
 		cmd.display(std::cout);
@@ -67,8 +71,45 @@ int main(int argc, char **argv)
 		cmd.setCmd("AT+CBC");
 		cmd.process(500, 200);
 		cmd.display(std::cout);
+
+		exit(0);
 	}
 
+
+	if (!strcmp(argv[1], "sms"))
+	{
+		if (argc < 3) {
+			printf("Error: expected phone number\n");
+			exit(1);
+		}
+		if (argc < 4) {
+			printf("Error: expected msg text\n");
+			exit(1);
+		}
+
+		printf("Sending msg '%s' to '%s'\n", argv[3], argv[2]);
+		Serial serial("/dev/ttyAMA0", 115200);
+		GsmLine *lines;
+
+		char tmp[32];
+		snprintf(tmp, 32, "AT+CMGS=\"%s\"\r\n", argv[2]);
+		serial.put(tmp, strlen(tmp));
+		usleep(1000);
+		lines = serial.readGsmLine(100);
+		if (lines) {
+			lines->displayAll(std::cout);
+			delete lines;
+		}
+		serial.put(argv[3], strlen(argv[3]));
+		serial.put(0x1A);
+
+		lines = serial.readGsmLine(100);
+		if (lines) {
+			lines->displayAll(std::cout);
+			delete lines;
+		}
+
+	}
 
 	return 0;
 }
