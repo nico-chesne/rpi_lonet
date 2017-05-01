@@ -7,37 +7,80 @@
 
 #include "Gpio.h"
 
-void *Gpio::polling_task(void *g)
-{
-	Gpio *gpio = (Gpio*)g;
-	while (1) {
-		if (gpio->poll() == true) {
-			if (gpio->callback != 0) {
-				gpio->callback(gpio->callback_param);
-			}
-		}
 
-		pthread_testcancel();
-	}
-	pthread_exit(NULL);
+Gpio::Gpio(gpio_id_t _id):
+	id(_id),
+	value(false),
+	function(GPIO_FUNC_IN),
+	edge(GPIO_EDGE_NONE),
+	active_low(false),
+	callback(0),
+	callback_param(0)
+{	}
+
+Gpio::Gpio(gpio_id_t _id, gpio_func_t func):
+	id(_id),
+	value(false),
+	edge(GPIO_EDGE_NONE),
+	active_low(false),
+	callback(0),
+	callback_param(0)
+{
+	configure(func);
 }
 
-bool Gpio::create_polling_task()
-{
-	if (pthread_create(&polling_thread, NULL, &Gpio::polling_task, this) != 0) {
-		return false;
-	}
-	return true;
+Gpio::~Gpio() {
+	cancel_callback();
 }
 
-bool Gpio::destroy_polling_task()
-{
-	if (polling_thread) {
-		pthread_cancel(polling_thread);
-		pthread_join(polling_thread, NULL);
-		polling_thread = 0;
-		return true;
+bool Gpio::configure(gpio_func_t f) {
+	// If we move from a func IN to sth else, reset the callback
+	if (function == GPIO_FUNC_IN
+			&& f != GPIO_FUNC_IN
+			&& callback != 0) {
+		cancel_callback();
+	}
+	return update_config(f);
+}
+
+bool Gpio::set(bool val) {
+	if (function == GPIO_FUNC_OUT) {
+		return update_value(val);
 	}
 	return false;
 }
 
+bool Gpio::read() {
+	if (function == GPIO_FUNC_IN)
+		update_value();
+		return value;
+	return false;
+};
+
+void Gpio::set_active_low(bool al) {
+	if (update_active_low(al)) {
+		active_low = al;
+	}
+}
+
+bool Gpio::set_callback(gpio_int_callback_t cb, void *param) {
+	if (function != GPIO_FUNC_IN) {
+		return false;
+	}
+	cancel_callback();
+	callback = cb;
+	callback_param = param;
+	return true;
+};
+
+
+bool Gpio::cancel_callback()
+{
+	if (callback != 0) {
+		edge = GPIO_EDGE_NONE;
+		callback = 0;
+		callback_param = 0;
+		return true;
+	}
+	return false;
+}

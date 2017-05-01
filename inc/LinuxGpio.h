@@ -25,139 +25,41 @@
 
 using namespace std;
 
+#define DEFAULT_POLL_TIMEOUT_MS 10
 #define GPIO_SYSFS_BASE "/sys/class/gpio"
 
 class LinuxGpio: public Gpio {
 public:
-	LinuxGpio(gpio_id_t _id):
-		Gpio(_id)
-	{
-		string export_str = GPIO_SYSFS_BASE "/export";
-		ofstream exportgpio(export_str.c_str());
-		if (exportgpio < 0) {
-		    cout << " OPERATION FAILED: Unable to export GPIO"<<  _id << endl;
-		}
-		exportgpio << _id << endl;;
-		exportgpio.close();
-
-		string getval_str = std::string(GPIO_SYSFS_BASE "/gpio") + std::to_string(this->id) + "/direction";
-		string val;
-		ifstream getvalgpio(getval_str.c_str());
-
-		if (getvalgpio < 0){
-			cout << " OPERATION FAILED: Unable to open direction for GPIO"<< this->id << endl;
-		} else {
-			getvalgpio >> val;
-			if (val == "out")
-				function = GPIO_FUNC_OUT;
-			else
-				function = GPIO_FUNC_IN;
-			getvalgpio.close();
-		}
-
-	}
-	~LinuxGpio()
-	{
-	    string unexport_str = GPIO_SYSFS_BASE "/unexport";
-	    ofstream unexportgpio(unexport_str.c_str());
-	    if (unexportgpio < 0){
-	        cout << " OPERATION FAILED: Unable to unexport GPIO"<< this->id << endl;
-	    } else {
-	    	unexportgpio << this->id;;
-	    	unexportgpio.close();
-	    }
-	}
+	LinuxGpio(gpio_id_t _id);
+	LinuxGpio(gpio_id_t _id, gpio_func_t func);
+	~LinuxGpio();
+	bool set_callback(Gpio::gpio_int_callback_t cb, void *param, gpio_edge_t e, int timeout_ms);
+	bool cancel_callback();
 
 protected:
-
-	bool update_config(gpio_func_t f) {
-		string setdir_str = std::string(GPIO_SYSFS_BASE "/gpio") + std::to_string(this->id) + "/direction";
-		ofstream setdirgpio(setdir_str.c_str());
-		if (setdirgpio < 0) {
-			cout << " OPERATION FAILED: Unable to set direction of GPIO"<< this->id <<  endl;
-		    return false;
-		}
-		if (f == GPIO_FUNC_OUT)
-			setdirgpio << "out";
-		else if (f == GPIO_FUNC_IN)
-			setdirgpio << "in";
-		else {
-			cout << "Bad function (" << f << "). Configuration aborted" << endl;
-			return false;
-		}
-        setdirgpio.close();
-        function = f;
-        return true;
+	bool exportGpio();
+	bool unexportGpio();
+	bool update_config(gpio_func_t f);
+	bool update_edge();
+	bool update_edge(gpio_edge_t e);
+	bool update_config();
+	bool update_value();
+	bool update_value(bool val);
+	bool update_active_low(bool val);
+	bool poll();
+	static void *polling_task(void *g);
+	bool create_polling_task();
+	bool destroy_polling_task();
+	void set_poll_timeout(int timeout_ms) {
+		poll_timeout_ms = timeout_ms;
+	}
+	int get_poll_timeout() {
+		return poll_timeout_ms;
 	}
 
-
-	bool update_value() {
-		string getval_str = std::string(GPIO_SYSFS_BASE "/gpio") + std::to_string(this->id) + "/value";
-		string val;
-		ifstream getvalgpio(getval_str.c_str());
-
-		if (getvalgpio < 0){
-			cout << " OPERATION FAILED: Unable to get value of GPIO"<< this->id << endl;
-			return false;
-		}
-		getvalgpio >> val;
-		if (val == "0")
-			value = false;
-		else
-			value = true;
-		getvalgpio.close();
-		return true;
-	}
-
-	bool update_value(bool val) {
-		string setval_str = std::string(GPIO_SYSFS_BASE "/gpio") + std::to_string(this->id) + "/value";
-		ofstream setvalgpio(setval_str.c_str());
-		if (setvalgpio < 0) {
-			cout << " OPERATION FAILED: Unable to set the value of GPIO"<< this->id << endl;
-			return false;
-		}
-		cout << "Successfully opened " << setval_str.c_str() << ". Setting to " << (val ? "1" : "0") << endl;
-		setvalgpio << (val ? "1" : "0");
-		setvalgpio.close();
-		value = val;
-		return true;
-	}
-
-	bool update_active_low(bool val) {
-		string setval_str = std::string(GPIO_SYSFS_BASE "/gpio") + std::to_string(this->id) + "/active_low";
-		ofstream setvalgpio(setval_str.c_str());
-		if (setvalgpio < 0){
-			cout << " OPERATION FAILED: Unable to set the active_low of GPIO"<< this->id << endl;
-			return false;
-		}
-		setvalgpio << val;
-		setvalgpio.close();
-		active_low = val;
-		return true;
-	}
-
-	bool poll() {
-		string setval_str = std::string(GPIO_SYSFS_BASE "/gpio") + std::to_string(this->id) + "/value";
-	    int fd;
-	    fd_set fds;
-	    struct timeval tv;
-
-	    if ((fd = open(setval_str.c_str(), O_RDONLY)) < 0) {
-	    	cout << " OPERATION FAILED: Unable to open file " << setval_str << " for polling" << endl;
-	    	return false;
-	    }
-	    FD_ZERO(&fds);
-	    FD_SET(fd, &fds);
-        tv.tv_sec = 0;
-        tv.tv_usec = 100000;
-	    if (select(fd+1, NULL, NULL, &fds, &tv) <= 0) {
-	    	return false;
-	    }
-
-	    close(fd);
-	    return true;
-	}
-
+private:
+	pthread_t 	polling_thread;
+	int			poll_timeout_ms;
 };
 
 #endif /* LINUXGPIO_H_ */

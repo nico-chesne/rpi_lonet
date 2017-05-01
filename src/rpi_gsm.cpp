@@ -18,6 +18,23 @@ using namespace std;
 
 #define SERIAL_BUF_SIZE 4096
 
+
+void ri_callback(void *param)
+{
+	LinuxGpio *gpio = (LinuxGpio*)param;
+	if (param != NULL)
+		cout << "RI int triggered on Gpio "<< gpio->getId() << " !\n";
+	else
+		cout << "RI int triggered on unknown gpio !\n";
+
+	Serial serial("/dev/ttyAMA0", 115200);
+
+	GsmCommand cmd("AT+CMGL=\"ALL\"", &serial);
+	cmd.process(100*1000, 200);
+	cmd.display(std::cout);
+}
+
+
 int main(int argc, char **argv)
 {
 	if (argc <= 1)
@@ -56,11 +73,18 @@ int main(int argc, char **argv)
 		cmd.process(200, 100);
 		cmd.display(std::cout);
 
+		// Send PIN code to SIM
 		cmd.setCmd("AT+CPIN=1234");
 		cmd.process(6000*1000, 100);
 		cmd.display(std::cout);
 
+		// Sms mode text = true
 		cmd.setCmd("AT+CMGF=1");
+		cmd.process(500, 200);
+		cmd.display(std::cout);
+
+		// SMS are delivered when received
+		cmd.setCmd("AT+CNMI=0,0,0,0,0");
 		cmd.process(500, 200);
 		cmd.display(std::cout);
 
@@ -108,6 +132,40 @@ int main(int argc, char **argv)
 			lines->displayAll(std::cout);
 			delete lines;
 		}
+		exit (0);
+	}
+
+	if (!strcmp(argv[1], "receive"))
+	{
+		Serial serial("/dev/ttyAMA0", 115200);
+		serial.flush(100);
+
+		LinuxGpio ri(23, Gpio::GPIO_FUNC_IN);
+		ri.set_callback(&ri_callback, &ri, Gpio::GPIO_EDGE_FALLING, 1000);
+		// Display all current sms got so far
+		GsmCommand cmd("AT+CMGL=\"ALL\"", &serial);
+		cmd.process(100*1000, 200);
+		cmd.display(std::cout);
+
+		// Start waiting for a new one
+		while (1) {
+			cout << "Waiting for ri to trigger\n";
+			usleep(5000*1000);
+		}
+		return 0;
+	}
+
+	if (!strcmp(argv[1], "delete_sms")) {
+		if (argc < 3) {
+			cout << "Missing sms index\n";
+			exit(1);
+		}
+		Serial serial("/dev/ttyAMA0", 115200);
+		char tmp[32];
+		snprintf(tmp, 32, "AT+CMGD=%s\r\n", argv[2]);
+		GsmCommand cmd(tmp, &serial);
+		cmd.process(500, 200);
+		cmd.display(std::cout);
 
 	}
 
