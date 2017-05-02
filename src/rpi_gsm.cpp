@@ -113,6 +113,7 @@ int main(int argc, char **argv)
 
 		printf("Sending msg '%s' to '%s'\n", argv[3], argv[2]);
 		Serial serial("/dev/ttyAMA0", 115200);
+		serial.flush(100);
 		GsmLine *lines;
 
 		char tmp[32];
@@ -166,7 +167,21 @@ int main(int argc, char **argv)
 		GsmCommand cmd(tmp, &serial);
 		cmd.process(500, 200);
 		cmd.display(std::cout);
+		return 0;
+	}
 
+	if (!strcmp(argv[1], "cmd")) {
+		if (argc < 3) {
+			printf("error: expected GSM command to send to device\n");
+			exit(-1);
+		}
+
+		Serial serial("/dev/ttyAMA0", 115200);
+		serial.flush(100);
+		GsmCommand cmd(argv[2], &serial);
+		cmd.process(500, 200);
+		cmd.display(std::cout);
+		return 0;
 	}
 
 	return 0;
