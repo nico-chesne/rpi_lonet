@@ -40,7 +40,7 @@ public:
 	gpio_id_t getId() { return id; }
 	bool configure(gpio_func_t f);
 	bool set(bool val);
-	bool read();
+	bool readData();
 	void set_active_low(bool al);
 	virtual bool set_callback(gpio_int_callback_t cb, void *param);
 	virtual bool cancel_callback();

@@ -7,11 +7,13 @@
 
 #include "LinuxGpio.h"
 #include <pthread.h>
+#include <string.h>
 
 LinuxGpio::LinuxGpio(gpio_id_t _id):
 	Gpio(_id),
 	poll_timeout_ms(0),
-	polling_thread(0)
+	polling_thread(0),
+	value_fd(-1)
 {
 	string export_str = GPIO_SYSFS_BASE "/export";
 	ofstream exportgpio(export_str.c_str());
@@ -28,7 +30,8 @@ LinuxGpio::LinuxGpio(gpio_id_t _id):
 LinuxGpio::LinuxGpio(gpio_id_t _id, gpio_func_t func):
 	Gpio(_id),
 	poll_timeout_ms(0),
-	polling_thread(0)
+	polling_thread(0),
+	value_fd(-1)
 {
 	exportGpio();
 	update_config(func);
@@ -60,7 +63,7 @@ bool LinuxGpio::set_callback(Gpio::gpio_int_callback_t cb, void *param, gpio_edg
 		printf("Unable to set edge to %d\n", e);
 		return false;
 	}
-	poll_timeout_ms = timeout_ms ? DEFAULT_POLL_TIMEOUT_MS : timeout_ms;
+	poll_timeout_ms = timeout_ms <= 0 ? DEFAULT_POLL_TIMEOUT_MS : timeout_ms;
 	return create_polling_task();
 }
 
@@ -234,36 +237,41 @@ bool LinuxGpio::update_active_low(bool val) {
 	return true;
 }
 
-bool LinuxGpio::poll() {
-	string setval_str = std::string(GPIO_SYSFS_BASE "/gpio") + std::to_string(this->id) + "/value";
-    int fd;
-    fd_set fds;
-    struct timeval tv;
+bool LinuxGpio::pollData() {
+    int fd, n;
 
-    if ((fd = open(setval_str.c_str(), O_RDONLY)) < 0) {
-    	cout << " OPERATION FAILED: Unable to open file " << setval_str << " for polling" << endl;
+    if (value_fd < 0) {
+    	cout << "Invalid value_fd field ! Aborting" << endl;
     	return false;
     }
-    FD_ZERO(&fds);
-    FD_SET(fd, &fds);
-    tv.tv_sec = poll_timeout_ms / 1000;
-    tv.tv_usec = (poll_timeout_ms % 1000) * 1000;
-    if (select(fd + 1, NULL, NULL, &fds, &tv) > 0 && FD_ISSET(fd, &fds)) {
-        close(fd);
-        cout << "Got something\n";
+    // stuff the poll structure
+    struct pollfd pollfdset = {
+    		.fd = value_fd,
+    		.events = POLLPRI | POLLERR,
+			.revents = 0
+    };
+    // Dummy read
+    uint8_t dummy;
+    if (read(value_fd, &dummy, 1) < 0) {
+        return false;
+    }
+    if ((n = poll(&pollfdset, 1, poll_timeout_ms) > 0) && (pollfdset.revents & POLLPRI)) {
+        // Set cursor back to start, for next dummy read
+        lseek(value_fd, 0, SEEK_SET);
         return true;
     }
-	cout << "Nothing on gpio's value\n";
-	return false;
+
+    // Set cursor back to start, for next dummy read
+    lseek(value_fd, 0, SEEK_SET);
+    return false;
 }
 
 void *LinuxGpio::polling_task(void *g)
 {
 	LinuxGpio *gpio = (LinuxGpio*)g;
 	while (1) {
-		if (gpio->poll() == true) {
+		if (gpio->pollData() == true) {
 			if (gpio->callback != 0) {
-				cout << "Calling callback\n";
 				gpio->callback(gpio->callback_param);
 			}
 		}
@@ -275,6 +283,11 @@ void *LinuxGpio::polling_task(void *g)
 
 bool LinuxGpio::create_polling_task()
 {
+	string setval_str = std::string(GPIO_SYSFS_BASE "/gpio") + std::to_string(this->id) + "/value";
+	if ((value_fd = open(setval_str.c_str(), O_RDONLY)) < 0) {
+		cout << " OPERATION FAILED: Unable to open file " << setval_str << " for polling" << endl;
+		return false;
+	}
 	if (pthread_create(&polling_thread, NULL, &LinuxGpio::polling_task, this) != 0) {
 		return false;
 	}
@@ -287,6 +300,8 @@ bool LinuxGpio::destroy_polling_task()
 		pthread_cancel(polling_thread);
 		pthread_join(polling_thread, NULL);
 		polling_thread = 0;
+		close(value_fd);
+		value_fd = -1;
 		return true;
 	}
 	return false;

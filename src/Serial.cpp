@@ -79,8 +79,9 @@ int Serial::printfData(char *format, ...)
 	va_end(argList);
 	if (n > 0)
 	{
-		cout << "Sending cmd '" << buf << "'" << "\n";
 		res = put(buf, n);
+		buf[strlen(buf) - 2] = 0;
+		cout << "=> " << buf << endl;
 		free(buf);
 	}
 	return res;

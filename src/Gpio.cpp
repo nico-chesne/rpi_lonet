@@ -50,7 +50,7 @@ bool Gpio::set(bool val) {
 	return false;
 }
 
-bool Gpio::read() {
+bool Gpio::readData() {
 	if (function == GPIO_FUNC_IN)
 		update_value();
 		return value;

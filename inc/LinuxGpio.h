@@ -18,14 +18,14 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
-#include <sys/select.h>
+#include <sys/poll.h>
 #include <sys/time.h>
 
 #include <Gpio.h>
 
 using namespace std;
 
-#define DEFAULT_POLL_TIMEOUT_MS 10
+#define DEFAULT_POLL_TIMEOUT_MS 1000
 #define GPIO_SYSFS_BASE "/sys/class/gpio"
 
 class LinuxGpio: public Gpio {
@@ -46,7 +46,7 @@ protected:
 	bool update_value();
 	bool update_value(bool val);
 	bool update_active_low(bool val);
-	bool poll();
+	bool pollData();
 	static void *polling_task(void *g);
 	bool create_polling_task();
 	bool destroy_polling_task();
@@ -60,6 +60,7 @@ protected:
 private:
 	pthread_t 	polling_thread;
 	int			poll_timeout_ms;
+	int			value_fd;
 };
 
 #endif /* LINUXGPIO_H_ */
