@@ -11,7 +11,6 @@
 
 class Gpio {
 public:
-public:
 	enum gpio_func_t {
 		GPIO_FUNC_IN,
 		GPIO_FUNC_OUT,

@@ -12,7 +12,8 @@
 #include <GsmLine.h>
 #include <Sms.h>
 #include <Serial.h>
-#include "../inc/GsmCommand.h"
+#include <GsmCommand.h>
+#include <LonetSIM808.h>
 
 using namespace std;
 

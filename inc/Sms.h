@@ -23,6 +23,12 @@ public:
 	  SMS_ALL               = (SMS_REC_UNREAD|SMS_REC_READ|SMS_STO_UNSENT|SMS_STO_SENT)
 	} SmsStatus_t;
 
+	typedef enum {
+		SMS_CONFIG_IMMEDIATE_DELIVER = 1 << 0,
+		SMS_CONFIG_MODE_TEST         = 1 << 1,
+		SMS_CONFIG_TOTAL             = 1 << 2
+	};
+
 public:
   Sms():
   date(0),
