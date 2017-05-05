@@ -55,6 +55,15 @@ int main(int argc, char **argv)
 		pwr.set(0);
 		return 0;
 	}
+	if (!strcmp(argv[1], "read_ri"))
+	{
+		LinuxGpio ri(23, Gpio::GPIO_FUNC_IN);
+		if (ri.readData() == true)
+			std::cout << "GPIO status is 1" << endl;
+		else
+			std::cout << "GPIO status is 0" << endl;
+		return 0;
+	}
 
 	if (!strcmp(argv[1], "init"))
 	{

@@ -20,23 +20,41 @@ Serial::Serial(const char *portName, speed_t speed):
 	if (tty_fd < 0) {
 		perror("open");
 	}
+	sem_init(&sem_access, 0, 1);
 	this->initPort(speed) ;
 }
 
 
-int Serial::put(char c)
+Serial::~Serial()
 {
-	return write(tty_fd, &c, 1) ;
+	close(tty_fd);
+	sem_destroy(&sem_access);
+}
+ssize_t Serial::put(char c)
+{
+	ssize_t n = 0;
+	sem_wait(&sem_access);
+	n = write(tty_fd, &c, 1);
+	sem_post(&sem_access);
+	return n;
 }
 
-int Serial::put(char *c, int n)
+ssize_t Serial::put(char *c, int n)
 {
-	return write(tty_fd, c, n) ;
+	int r = 0;
+	sem_wait(&sem_access);
+	r = write(tty_fd, c, n) ;
+	sem_post(&sem_access);
+	return r;
 }
 
-int Serial::readData(char *buf, size_t n)
+ssize_t Serial::readData(char *buf, size_t n)
 {
-	return read(tty_fd, buf, n);
+	int r = 0;
+	sem_wait(&sem_access);
+	r = read(tty_fd, buf, n);
+	sem_post(&sem_access);
+	return r;
 }
 
 int Serial::selectData(unsigned int timeout_ms)

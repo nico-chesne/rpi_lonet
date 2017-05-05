@@ -32,7 +32,9 @@ public:
 	  lines(0),
 	  cmd(0),
 	  serial(0)
-	{ }
+	{
+
+	}
 
   // Ctor to assign a command
   GsmCommand(const char *_cmd, Serial *s):
@@ -108,6 +110,10 @@ public:
 	  if (status == GSM_NO_STATUS)
 		  return -1;
 	  return 0;
+  }
+
+  inline const char *getCmd() {
+	  return cmd;
   }
 
   inline int setCmd(const char *_cmd) {

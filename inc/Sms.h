@@ -27,7 +27,7 @@ public:
 		SMS_CONFIG_IMMEDIATE_DELIVER = 1 << 0,
 		SMS_CONFIG_MODE_TEST         = 1 << 1,
 		SMS_CONFIG_TOTAL             = 1 << 2
-	};
+	} SmsConfig_t;
 
 public:
   Sms():

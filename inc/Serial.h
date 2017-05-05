@@ -5,6 +5,9 @@
  *      Author: nico
  */
 
+#ifndef _SERIAL_H_
+#define _SERIAL_H_
+
 #include <stdlib.h>
 #include <string.h>
 #include <stdlib.h>
@@ -14,6 +17,7 @@
 #include <termios.h>
 #include <pthread.h>
 #include <stdarg.h>
+#include <semaphore.h>
 
 
 #include "GsmLine.h"
@@ -25,10 +29,11 @@ class Serial
 public :
 
 	Serial(const char *portName, speed_t sp);
+	~Serial();
 	int baud(speed_t speed);
-	int put(char c);
-	int put(char *c, int n);
-	int readData(char *buf, size_t n);
+	ssize_t put(char c);
+	ssize_t put(char *c, int n);
+	ssize_t readData(char *buf, size_t n);
 	int selectData(unsigned int timeout_ms);
 	int flush(unsigned int timeout_ms);
 	int printfData(char *format, ...);
@@ -51,4 +56,8 @@ private:
 	int 			tty_fd;
 	speed_t         speed;
 	bool            isBlocking;
+	sem_t           sem_access;
 };
+
+#endif // _SERIAL_H_
+

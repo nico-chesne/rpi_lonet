@@ -8,14 +8,19 @@
 #ifndef LONETSIM808_H_
 #define LONETSIM808_H_
 
-#include <semaphore.h>
-
 #include <LinuxGpio.h>
 #include <Serial.h>
 #include <GsmCommand.h>
 #include <Sms.h>
 
 using namespace std;
+
+#define LONETSIM808_DEFAULT_SERIAL_SPEED 115200
+#define LONETSIM808_DEFAULT_RI_POLL_TIMEOUT 100
+#define LONETSIM808_MANUF_ID "SIMCOM_Ltd"
+#define LONETSIM808_MODEL_ID "SIMCOM_Ltd"
+#define LONETSIM808_DEFAULT_DELAY_BEFORE_READ_ANSWER_US 200
+#define LONETSIM808_DELAY_AFTER_PIN_SET_MS 6000
 
 class LonetSIM808 {
 
@@ -42,16 +47,20 @@ public:
 public:
 	// Manage
 	bool   initialize(const char *pin_code);
+	bool   isInitialized() { return is_initialized; }
+	char const * const getSerialNumber() { return serial_number; };
 	bool   power(bool enable);
 	bool   isPowerUp();
 	bool   pinSet(const char *pin_code);
 	bool   isPinOk();
 	string getOperator();
 	bool   batteryInfoUpdate();
-	bool   batteryInfoGet(bool force_update = false);
+	bool   batteryInfoGet(bool force_update, BatteryInfo_t *bat_info);
 
-	// Generic
-	bool atCmdSend(GsmCommand *command);
+	// Generic send. Cmd must be properly initialized with a Serial line and a command
+	bool atCmdSend(GsmCommand *cmd, int delay_before_read_answer_us);
+	// Generic send. GsmCommand will be created and must be deleted after usage
+	bool atCmdSend(const char *at_cmd, GsmCommand **command, int delay_before_read_answer_us);
 
 	// Sms
 	bool      smsSetConfig(uint32_t config);
@@ -75,10 +84,11 @@ protected:
 	Serial        serial;
 	LinuxGpio     pwr;
 	LinuxGpio     ri;
-	sem_t         serial_sem;
 
 	// Generic
-	char          pin[4];
+	char          pin[5];
+	bool          is_initialized;
+	char          serial_number[16];
 
 	// Battery
 	BatteryInfo_t battery_info;
