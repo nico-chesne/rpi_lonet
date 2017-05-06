@@ -35,6 +35,7 @@ void ri_callback(void *param)
 	cmd.display(std::cout);
 }
 
+#define MY_LONET_SIM_PIN "1234"
 
 int main(int argc, char **argv)
 {
@@ -43,17 +44,59 @@ int main(int argc, char **argv)
 		printf("Missing parameter [on|off|read]\n");
 		exit (-1);
 	}
+	LonetSIM808 lonet("/dev/ttyAMA0", 24, 23);
 
-	if (!strcmp(argv[1], "on") || !strcmp(argv[1], "off"))
+	if (!strcmp(argv[1], "on"))
 	{
-		LinuxGpio pwr(24);
-		usleep(50000);
-		pwr.configure(Gpio::GPIO_FUNC_OUT);
-		usleep(50000);
-		pwr.set(1);
-		usleep(2500000);
-		pwr.set(0);
-		return 0;
+		if (!lonet.isPowerUp())
+		{
+			lonet.power(true);
+			usleep(200 * 1000);
+		}
+		if (!lonet.initialize()) {
+			std::cerr << "Could not initialize Lonet module" << endl;
+			exit (1);
+		}
+		if (!lonet.isPinOk())
+		{
+			if (!lonet.pinSet(MY_LONET_SIM_PIN))
+			{
+				std::cerr << "Failed setting PIN code" << endl;
+				exit (1);
+			}
+		}
+		LonetSIM808::BatteryInfo_t bat;
+
+		std::cout << "Lonet is switched " << (lonet.isPowerUp() ? "on" : "off") << endl;
+		std::cout << "Lonet serial number is " << lonet.getSerialNumber() << endl;
+		std::cout << "Lonet is connected to network: '" << lonet.getOperator() << "'" << endl;
+
+		if (!lonet.batteryInfoGet(true, &bat)) {
+			std:cerr << "Unable to get battery info" << endl;
+			exit(1);
+		}
+		switch (bat.charge_status) {
+		case LonetSIM808::BATTERY_CHARGING:
+			std::cout << "Lonet battery status is charging (" << to_string (bat.capacity) << "%, " << to_string(bat.voltage) << "mV) " << endl;
+			break;
+		case LonetSIM808::BATTERY_FINISHED_CHARGING:
+			std::cout << "Lonet battery status has finished charging (" << to_string (bat.capacity) << "%, " << to_string(bat.voltage) << "mV) " << endl;
+			break;
+		case LonetSIM808::BATTERY_NOT_CHARGING:
+			std::cout << "Lonet battery status is discharging (" << to_string (bat.capacity) << "%, " << to_string(bat.voltage) << "mV) " << endl;
+			break;
+		default:
+			std::cerr << "Invalid battery status" << endl;
+			break;
+		}
+		exit (0);
+	}
+	if (!strcmp(argv[1], "off"))
+	{
+		lonet.power(false);
+		usleep(100*1000);
+		std::cout << "Lonet is switched " << (lonet.isPowerUp() ? "on" : "off") << endl;
+		exit (1);
 	}
 	if (!strcmp(argv[1], "read_ri"))
 	{
@@ -65,49 +108,6 @@ int main(int argc, char **argv)
 		return 0;
 	}
 
-	if (!strcmp(argv[1], "init"))
-	{
-		Serial serial("/dev/ttyAMA0", 115200);
-		GsmCommand cmd("AT", &serial);
-
-		serial.flush(100);
-
-		cmd.process(200, 100);
-		cmd.display(std::cout);
-
-		cmd.setCmd("ATE0");
-		cmd.process(200, 100);
-		cmd.display(std::cout);
-
-		cmd.setCmd("AT+CGMI");
-		cmd.process(200, 100);
-		cmd.display(std::cout);
-
-		// Send PIN code to SIM
-		cmd.setCmd("AT+CPIN=1234");
-		cmd.process(6000*1000, 100);
-		cmd.display(std::cout);
-
-		// Sms mode text = true
-		cmd.setCmd("AT+CMGF=1");
-		cmd.process(500, 200);
-		cmd.display(std::cout);
-
-		// SMS are delivered when received
-		cmd.setCmd("AT+CNMI=0,0,0,0,0");
-		cmd.process(500, 200);
-		cmd.display(std::cout);
-
-		cmd.setCmd("AT+COPS?");
-		cmd.process(200, 100);
-		cmd.display(std::cout);
-
-		cmd.setCmd("AT+CBC");
-		cmd.process(500, 200);
-		cmd.display(std::cout);
-
-		exit(0);
-	}
 
 
 	if (!strcmp(argv[1], "sms"))
@@ -186,11 +186,13 @@ int main(int argc, char **argv)
 			exit(-1);
 		}
 
-		Serial serial("/dev/ttyAMA0", 115200);
-		serial.flush(100);
-		GsmCommand cmd(argv[2], &serial);
-		cmd.process(500, 200);
-		cmd.display(std::cout);
+		GsmCommand *cmd;
+		if (lonet.atCmdSend(argv[2], &cmd, 1000)) {
+			cmd->display(std::cout);
+		} else {
+			std::cerr << "Unable to send command " << argv[2] << endl;
+		}
+		delete cmd;
 		return 0;
 	}
 

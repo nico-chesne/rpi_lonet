@@ -18,7 +18,7 @@ using namespace std;
 #define LONETSIM808_DEFAULT_SERIAL_SPEED 115200
 #define LONETSIM808_DEFAULT_RI_POLL_TIMEOUT 100
 #define LONETSIM808_MANUF_ID "SIMCOM_Ltd"
-#define LONETSIM808_MODEL_ID "SIMCOM_Ltd"
+#define LONETSIM808_MODEL_ID "SIMCOM_SIM808"
 #define LONETSIM808_DEFAULT_DELAY_BEFORE_READ_ANSWER_US 200
 #define LONETSIM808_DELAY_AFTER_PIN_SET_MS 6000
 
@@ -26,6 +26,7 @@ class LonetSIM808 {
 
 public:
 	typedef enum {
+		BATTERY_UNKNOWN_STATUS,
 		BATTERY_NOT_CHARGING,
 		BATTERY_CHARGING,
 		BATTERY_FINISHED_CHARGING
@@ -46,7 +47,7 @@ public:
 
 public:
 	// Manage
-	bool   initialize(const char *pin_code);
+	bool   initialize();
 	bool   isInitialized() { return is_initialized; }
 	char const * const getSerialNumber() { return serial_number; };
 	bool   power(bool enable);
