@@ -73,7 +73,7 @@ int main(int argc, char **argv)
 		std::cout << "Lonet serial number is " << lonet.getSerialNumber() << endl;
 		std::cout << "Lonet is connected to network: '" << lonet.getOperator() << "'" << endl;
 
-		lonet.smsSetConfig(Sms::SMS_CONFIG_IMMEDIATE_DELIVER | Sms::SMS_CONFIG_MODE_TEXT);
+		lonet.smsSetConfig(Sms::SMS_CONFIG_MODE_TEXT);
 
 		if (!lonet.batteryInfoGet(true, &bat)) {
 			std:cerr << "Unable to get battery info" << endl;

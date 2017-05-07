@@ -249,7 +249,7 @@ bool      LonetSIM808::smsSetConfig(uint32_t config)
 	GsmCommand *gsm_command;
 
 	// AT+CNMI=<mode,mt, bm, ds, bfr>
-	if ((config & Sms::SMS_CONFIG_IMMEDIATE_DELIVER) && !(sms_config & Sms::SMS_CONFIG_IMMEDIATE_DELIVER)) {
+	if ((config & Sms::SMS_CONFIG_IMMEDIATE_DELIVER)) { //&& !(sms_config & Sms::SMS_CONFIG_IMMEDIATE_DELIVER)) {
 		at_command = "AT+CNMI=2,2,0,0,0";
 		bool cmd_res = true;
 
@@ -264,7 +264,7 @@ bool      LonetSIM808::smsSetConfig(uint32_t config)
 		}
 		delete gsm_command;
 	}
-	else if (!(config & Sms::SMS_CONFIG_IMMEDIATE_DELIVER) && (sms_config & Sms::SMS_CONFIG_IMMEDIATE_DELIVER)) {
+	else if (!(config & Sms::SMS_CONFIG_IMMEDIATE_DELIVER)) { // && (sms_config & Sms::SMS_CONFIG_IMMEDIATE_DELIVER)) {
 		at_command = "AT+CNMI=0,0,0,0,0";
 		bool cmd_res = true;
 
@@ -283,7 +283,7 @@ bool      LonetSIM808::smsSetConfig(uint32_t config)
 	// AT+CMGF=<mode>
 	// 0: PDU
 	// 1: Text
-	if ((config & Sms::SMS_CONFIG_MODE_TEXT) && !(sms_config & Sms::SMS_CONFIG_MODE_TEXT)) {
+	if ((config & Sms::SMS_CONFIG_MODE_TEXT)) { // && !(sms_config & Sms::SMS_CONFIG_MODE_TEXT)) {
 		at_command = "AT+CMGF=1";
 		bool cmd_res = true;
 
@@ -298,7 +298,7 @@ bool      LonetSIM808::smsSetConfig(uint32_t config)
 		}
 		delete gsm_command;
 	}
-	else if (!(config & Sms::SMS_CONFIG_MODE_TEXT) && (sms_config & Sms::SMS_CONFIG_MODE_TEXT)) {
+	else if (!(config & Sms::SMS_CONFIG_MODE_TEXT)) { // && (sms_config & Sms::SMS_CONFIG_MODE_TEXT)) {
 		at_command = "AT+CMGF=0";
 		bool cmd_res = true;
 
