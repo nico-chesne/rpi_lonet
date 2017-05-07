@@ -458,28 +458,21 @@ bool      LonetSIM808::smsSend(const char *number, const char *message)
 	char tmp[32];
 
 	snprintf(tmp, 32, "AT+CMGS=\"%s\"\r\n", number);
-	std::cout << "Sending '" << tmp << "'" << endl;
+	//std::cout << "Sending '" << tmp << "'" << endl;
 	serial.put(tmp, strlen(tmp));
-	usleep(50*1000);
-	lines = serial.readGsmLine(100);
-	if (!lines) {
-		std::cerr << "No line returned after CMGS" << endl;
-		return false;
-	}
-	if (lines->getData()[0] != '>') {
+	usleep(1000);
+	lines = serial.readGsmLine(50);
+	if (lines) {
 		delete lines;
-		std::cerr << "No char > found in answer" << endl;
-		return false;
 	}
-	serial.printfData("%s%c", message, (char)0x1A);
+
+	serial.printfData("%s", message);
+	serial.put((char)0x1A);
 	lines = serial.readGsmLine(100);
 	if (lines) {
 		delete lines;
-		return true;
-	} else {
-		std::cerr << "No answer got after message" << endl;
-		return false;
 	}
+	return true;
 }
 
 

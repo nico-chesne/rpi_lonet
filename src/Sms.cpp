@@ -129,7 +129,7 @@ inline void Sms::setStatus(const char *statusStr) {
   status = helper_StringToSmsStatus(statusStr);
 }
 
-inline void Sms::display(std::ostream &s)
+void Sms::display(std::ostream &s)
 {
    if (date && text)
      s << "Sms #"<< index << "\tstatus: "<< helper_SmsStatusToString(status) << "\tdate:"<< date << "\tfrom:"<< from << CR << LF << "\tsays:'"<< text << "'"<< CR << LF;

@@ -72,6 +72,7 @@ public:
 	bool      smsDelete(uint32_t index);
 	bool      smsDeleteAll();
 	bool      smsSend(const char *number, const char *message);
+	bool 	  smsDisplayAll(std::ostream &out);
 
 	// GPS
 	bool gpsOpen();

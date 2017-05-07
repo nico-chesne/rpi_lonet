@@ -99,7 +99,7 @@ int Serial::printfData(char *format, ...)
 	{
 		res = put(buf, n);
 		buf[strlen(buf) - 2] = 0;
-		//cout << "=> " << buf << endl;
+		cout << "=> " << buf << endl;
 		free(buf);
 	}
 	return res;

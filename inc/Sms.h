@@ -25,7 +25,7 @@ public:
 
 	typedef enum {
 		SMS_CONFIG_IMMEDIATE_DELIVER = 1 << 0,
-		SMS_CONFIG_MODE_TEST         = 1 << 1,
+		SMS_CONFIG_MODE_TEXT         = 1 << 1,
 		SMS_CONFIG_TOTAL             = 1 << 2
 	} SmsConfig_t;
 
@@ -79,7 +79,7 @@ public:
     from = strdup(newFrom);
   }
 
-  inline void display(std::ostream &s);
+  void display(std::ostream &s);
 
 private:
   int index;

@@ -46,12 +46,14 @@ int main(int argc, char **argv)
 	}
 	LonetSIM808 lonet("/dev/ttyAMA0", 24, 23);
 
+	// INIT
+	// ------------------------
 	if (!strcmp(argv[1], "on"))
 	{
 		if (!lonet.isPowerUp())
 		{
 			lonet.power(true);
-			usleep(200 * 1000);
+			usleep(500 * 1000);
 		}
 		if (!lonet.initialize()) {
 			std::cerr << "Could not initialize Lonet module" << endl;
@@ -70,6 +72,8 @@ int main(int argc, char **argv)
 		std::cout << "Lonet is switched " << (lonet.isPowerUp() ? "on" : "off") << endl;
 		std::cout << "Lonet serial number is " << lonet.getSerialNumber() << endl;
 		std::cout << "Lonet is connected to network: '" << lonet.getOperator() << "'" << endl;
+
+		lonet.smsSetConfig(Sms::SMS_CONFIG_IMMEDIATE_DELIVER | Sms::SMS_CONFIG_MODE_TEXT);
 
 		if (!lonet.batteryInfoGet(true, &bat)) {
 			std:cerr << "Unable to get battery info" << endl;
@@ -91,6 +95,9 @@ int main(int argc, char **argv)
 		}
 		exit (0);
 	}
+
+	// SWITCH OFF
+	// ------------------------
 	if (!strcmp(argv[1], "off"))
 	{
 		lonet.power(false);
@@ -98,6 +105,9 @@ int main(int argc, char **argv)
 		std::cout << "Lonet is switched " << (lonet.isPowerUp() ? "on" : "off") << endl;
 		exit (1);
 	}
+
+	// READ STATUS PIN
+	// ------------------------
 	if (!strcmp(argv[1], "read_ri"))
 	{
 		LinuxGpio ri(23, Gpio::GPIO_FUNC_IN);
@@ -109,7 +119,8 @@ int main(int argc, char **argv)
 	}
 
 
-
+	// SEND SMS <number> <message>
+	// ------------------------
 	if (!strcmp(argv[1], "sms"))
 	{
 		if (argc < 3) {
@@ -122,64 +133,46 @@ int main(int argc, char **argv)
 		}
 
 		printf("Sending msg '%s' to '%s'\n", argv[3], argv[2]);
-		Serial serial("/dev/ttyAMA0", 115200);
-		serial.flush(100);
-		GsmLine *lines;
-
-		char tmp[32];
-		snprintf(tmp, 32, "AT+CMGS=\"%s\"\r\n", argv[2]);
-		serial.put(tmp, strlen(tmp));
-		usleep(1000);
-		lines = serial.readGsmLine(100);
-		if (lines) {
-			lines->displayAll(std::cout);
-			delete lines;
-		}
-		serial.put(argv[3], strlen(argv[3]));
-		serial.put(0x1A);
-
-		lines = serial.readGsmLine(100);
-		if (lines) {
-			lines->displayAll(std::cout);
-			delete lines;
-		}
+		lonet.smsSend(argv[2], argv[3]);
 		exit (0);
 	}
 
-	if (!strcmp(argv[1], "receive"))
+	// LIST SMS
+	// ------------------------
+	if (!strcmp(argv[1], "list_sms"))
 	{
-		Serial serial("/dev/ttyAMA0", 115200);
-		serial.flush(100);
-
-		LinuxGpio ri(23, Gpio::GPIO_FUNC_IN);
-		ri.set_callback(&ri_callback, &ri, Gpio::GPIO_EDGE_FALLING, 1000);
-		// Display all current sms got so far
-		GsmCommand cmd("AT+CMGL=\"ALL\"", &serial);
-		cmd.process(100*1000, 200);
-		cmd.display(std::cout);
-
-		// Start waiting for a new one
-		while (1) {
-			cout << "Waiting for ri to trigger\n";
-			usleep(5000*1000);
-		}
+		lonet.smsUpdateList();
+		lonet.smsDisplayAll(std::cout);
 		return 0;
 	}
 
+	// RECEIVE SMS
+	// ------------------------
+	if (!strcmp(argv[1], "receive_sms"))
+	{
+		lonet.smsUpdateList();
+		uint32_t n = lonet.smsGetNumber();
+
+		while (n == lonet.smsGetNumber()) {
+			std::cout << "Waiting for new sms" << endl;
+			usleep(2000*1000);
+		}
+		return true;
+	}
+
+
+	// DELETE ONE SMS
+	// ------------------------
 	if (!strcmp(argv[1], "delete_sms")) {
 		if (argc < 3) {
 			cout << "Missing sms index\n";
 			exit(1);
 		}
-		Serial serial("/dev/ttyAMA0", 115200);
-		char tmp[32];
-		snprintf(tmp, 32, "AT+CMGD=%s\r\n", argv[2]);
-		GsmCommand cmd(tmp, &serial);
-		cmd.process(500, 200);
-		cmd.display(std::cout);
+		lonet.smsDelete(atoi(argv[2]));
 		return 0;
 	}
 
+	// SEND AT CMD
 	if (!strcmp(argv[1], "cmd")) {
 		if (argc < 3) {
 			printf("error: expected GSM command to send to device\n");
