@@ -17,8 +17,6 @@
 
 using namespace std;
 
-#define SERIAL_BUF_SIZE 4096
-
 
 void ri_callback(void *param)
 {
@@ -33,6 +31,31 @@ void ri_callback(void *param)
 	GsmCommand cmd("AT+CMGL=\"ALL\"", &serial);
 	cmd.process(100*1000, 200);
 	cmd.display(std::cout);
+}
+
+void sms_callback(LonetSIM808 *lonet, Sms *sms)
+{
+	if (sms != 0) {
+		//sms->display(std::cout);
+		if (!strcmp(sms->getText(), "battery?")) {
+			LonetSIM808::BatteryInfo_t info;
+			if (lonet->batteryInfoGet(true, &info)) {
+				char tmp[64];
+				snprintf(tmp, 64, "Battery info (%s): %d%% (%dmV)",
+						info.charge_status == LonetSIM808::BATTERY_CHARGING ? "charging" :
+								(info.charge_status == LonetSIM808::BATTERY_NOT_CHARGING ? "discharging" :
+										(info.charge_status == LonetSIM808::BATTERY_FINISHED_CHARGING ? "fully charged" : "unknown")
+								),
+						info.capacity, info.voltage);
+				if (!lonet->smsSend(sms->getFrom(), tmp)) {
+					std::cout << "Could not send battery status";
+				}
+			}
+		}
+		usleep(100*1000);
+		if (lonet)
+			lonet->smsDelete(sms->getIndex());
+	}
 }
 
 #define MY_LONET_SIM_PIN "1234"
@@ -150,10 +173,9 @@ int main(int argc, char **argv)
 	// ------------------------
 	if (!strcmp(argv[1], "receive_sms"))
 	{
-		lonet.smsUpdateList();
-		uint32_t n = lonet.smsGetNumber();
+		lonet.smsCallbackInstall(sms_callback);
 
-		while (n == lonet.smsGetNumber()) {
+		while (true) {
 			std::cout << "Waiting for new sms" << endl;
 			usleep(2000*1000);
 		}

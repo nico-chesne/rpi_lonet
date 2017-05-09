@@ -98,10 +98,12 @@ int Serial::printfData(char *format, ...)
 	if (n > 0)
 	{
 		res = put(buf, n);
-		buf[strlen(buf) - 2] = 0;
+		buf[strlen(buf) - 1] = 0;
 		cout << "=> " << buf << endl;
 		free(buf);
 	}
+	if (res < 0)
+		std::cerr << "Unable to send data to serial";
 	return res;
 }
 

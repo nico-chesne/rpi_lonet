@@ -20,6 +20,9 @@ LonetSIM808::LonetSIM808(const char *serial_port_name, Gpio::gpio_id_t gpio_pwr,
 	sms_config = 0;
 	is_initialized = false;
 	memset(serial_number, 0, sizeof(serial_number));
+	sem_init(&sms_monitoring, 0, 0);
+	sms_monitoring_thread = 0;
+	sms_callback = 0;
 }
 
 LonetSIM808::~LonetSIM808()
@@ -28,17 +31,78 @@ LonetSIM808::~LonetSIM808()
 		for (int i = 0; i < sms_received_number; i++) delete sms_received_list[i];
 	free(sms_received_list);
 	sms_received_number = 0;
+	if (sms_monitoring_thread) {
+		pthread_cancel(sms_monitoring_thread);
+		pthread_join(sms_monitoring_thread, NULL);
+	}
+	sem_destroy(&sms_monitoring);
 }
 
 
 void LonetSIM808::riCallback(void *param)
 {
 	LonetSIM808 *lonet = (LonetSIM808 *)param;
-	std::cout << "ri callback !" << endl;
+
+	//std::cout << "ri callback !" << endl;
+	usleep(200 * 1000);
 	lonet->smsUpdateList();
-	if (lonet->smsGetNumber() > 0)
-		lonet->smsGetLast()->display(std::cout);
+	lonet->smsGetLast()->display(std::cout);
+	if (lonet->smsGetNumber() > 0) {
+		//std::cout << "posting sms_monitoring" << endl;
+		sem_post(&lonet->sms_monitoring);
+	} else {
+		//std::cout << "Something got wrong: no sms received" << endl;
+	}
 }
+
+void *LonetSIM808::sms_monitoring_task(void *g)
+{
+	LonetSIM808 *lonet = (LonetSIM808 *)g;
+
+	while (1) {
+		struct timespec tv;
+		tv.tv_sec = 0;
+		tv.tv_nsec = 1000 * 1000 * 100; //100ms timout
+		if (sem_timedwait(&lonet->sms_monitoring, &tv) < 0) {
+			pthread_testcancel();
+			continue;
+		}
+		if (lonet->sms_callback != 0) {
+			//std::cout << "Calling callback with " << to_string(lonet->smsGetLast()->getIndex()) << endl;
+			lonet->sms_callback(lonet, lonet->smsGetLast());
+		}
+		pthread_testcancel();
+	}
+	pthread_exit(NULL);
+}
+
+
+bool	  LonetSIM808::smsCallbackInstall(lonetsim808_sms_callback_t cb)
+{
+	if (sms_callback != 0 || sms_monitoring_thread != 0) {
+		std::cerr << "SMS Callback already installed";
+		return false;
+	}
+	sms_callback = cb;
+	if (pthread_create(&sms_monitoring_thread, NULL, &LonetSIM808::sms_monitoring_task, this) != 0) {
+		std::cerr << "Unable to create monitoring thread!" << endl;
+		sms_callback = 0;
+		return false;
+	}
+	return true;
+}
+
+bool	  LonetSIM808::smsCallbackUninstall()
+{
+	if (sms_monitoring_thread) {
+		pthread_cancel(sms_monitoring_thread);
+		pthread_join(sms_monitoring_thread, NULL);
+	}
+	sms_monitoring_thread = 0;
+	sms_callback = 0;
+	return true;
+}
+
 
 
 // Manage
@@ -336,7 +400,7 @@ bool      LonetSIM808::smsUpdateList()
   // Lock answer again coz we need it before someone else send a command"
   if (cmd->getStatus() != GsmCommand::GSM_OK) {
 	  // Problem with execution of command
-	  std::cerr << "Unable to get sms list from TE" << endl;
+	  std::cerr << "Unable to get sms list from TE: " << to_string(cmd->getStatus()) << endl;
 	  delete cmd;
 	  return false;
   }
@@ -401,22 +465,42 @@ Sms      *LonetSIM808::smsGetLast()
 	return NULL;
 }
 
-bool      LonetSIM808::smsDelete(uint32_t index)
+bool      LonetSIM808::smsDelete(uint32_t te_index)
 {
-	char at_cmd[16];
-	GsmCommand *gsm_cmd;
+	int i;
 
 	if (smsUpdateList() == false) {
 		std::cerr << "Unable to update sms list before deletion" << endl;
 		return false;
 	}
-	if (index >= sms_received_number) {
-		std::cerr << "Index higher than sms received number (" << to_string(sms_received_number) << ")" << endl;
+	for (i = 0; i < sms_received_number; i++) {
+		if (sms_received_list[i]->getIndex() == te_index)
+			break;
+	}
+	if (!smsDeleteFromTabIndex(i)) {
+		std::cerr << "Unable to delete sms #" << to_string(te_index) << endl;
 		return false;
 	}
-	snprintf(at_cmd, 16, "AT+CMGD=%d", index);
+
+	if (smsUpdateList() == false) {
+		std::cerr << "Unable to update sms list after deletion" << endl;
+		return false;
+	}
+	return true;
+}
+
+bool      LonetSIM808::smsDeleteFromTabIndex(uint32_t tab_index)
+{
+	char at_cmd[16];
+	GsmCommand *gsm_cmd;
+
+	if (tab_index >= sms_received_number) {
+		std::cerr << "TE index not found than sms received number (" << to_string(sms_received_number) << ")" << endl;
+		return false;
+	}
+	snprintf(at_cmd, 16, "AT+CMGD=%d", sms_received_list[tab_index]->getIndex());
 	gsm_cmd = new GsmCommand(at_cmd, &serial);
-	if (!gsm_cmd->process(1000, 50)) {
+	if (gsm_cmd->process(1000, 50) < 0) {
 		std::cerr << "Unable to process command " << at_cmd << endl;
 		delete gsm_cmd;
 		return false;
@@ -426,17 +510,27 @@ bool      LonetSIM808::smsDelete(uint32_t index)
 		delete gsm_cmd;
 		return false;
 	}
-	if (smsUpdateList() == false) {
-		std::cerr << "Unable to update sms list after deletion" << endl;
-		return false;
-	}
 	return true;
 }
 
+
 bool      LonetSIM808::smsDeleteAll()
 {
-	for (int i = 0; i < sms_received_number; i++)
+	for (int i = 0; i < sms_received_number; i++) {
+		char at_cmd[16];
+		GsmCommand *gsm_cmd;
+
+		snprintf(at_cmd, 16, "AT+CMGD=%d", sms_received_list[i]->getIndex());
+		gsm_cmd = new GsmCommand(at_cmd, &serial);
+		if (gsm_cmd->process(1000, 50) < 0) {
+			// Only warning here...
+			std::cerr << "Unable to process command " << at_cmd << endl;
+		} else if (gsm_cmd->getStatus() != GsmCommand::GSM_OK) {
+			// Only warning here...
+			std::cerr << "Error returned by command " << at_cmd << endl;
+		}
 		delete sms_received_list[i];
+	}
 	free(sms_received_list);
 	sms_received_number = 0;
 	return true;

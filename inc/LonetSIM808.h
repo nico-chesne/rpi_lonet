@@ -38,6 +38,8 @@ public:
 		uint32_t       voltage;
 	} BatteryInfo_t;
 
+	typedef void (lonetsim808_sms_callback_t)(LonetSIM808 *lonet, Sms *sms);
+
 public:
 	LonetSIM808(const char *serial_port_name, Gpio::gpio_id_t gpio_pwr, Gpio::gpio_id_t gpio_ri);
 	~LonetSIM808();
@@ -69,10 +71,13 @@ public:
 	uint32_t  smsGetNumber();
 	Sms      *smsGet(uint32_t index);
 	Sms      *smsGetLast();
-	bool      smsDelete(uint32_t index);
+	bool      smsDelete(uint32_t te_index);
+	bool      smsDeleteFromTabIndex(uint32_t tab_index);
 	bool      smsDeleteAll();
 	bool      smsSend(const char *number, const char *message);
 	bool 	  smsDisplayAll(std::ostream &out);
+	bool	  smsCallbackInstall(lonetsim808_sms_callback_t cb);
+	bool	  smsCallbackUninstall();
 
 	// GPS
 	bool gpsOpen();
@@ -80,6 +85,10 @@ public:
 	bool gpsReset();
 	bool gpsGetStatus(bool *gpsHasSignal);
 	bool gpsReadInfo(char **location, uint32_t *length);
+
+protected:
+	static void *sms_monitoring_task(void *g);
+
 
 protected:
 	// HW Resources
@@ -99,6 +108,10 @@ protected:
 	Sms         **sms_received_list;
 	uint32_t      sms_received_number;
 	uint32_t      sms_config;
+	lonetsim808_sms_callback_t *sms_callback;
+	pthread_t 	  sms_monitoring_thread;
+public:
+	sem_t		  sms_monitoring;
 };
 
 #endif /* LONETSIM808_H_ */

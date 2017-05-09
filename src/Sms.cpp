@@ -92,7 +92,6 @@ Sms::Sms(GsmLine &gsmRawData, GsmLine &gsmText)
       // Now look for end of token
       while (data[i] && data[i] != delims[t])
       {
-        // pc.putc(data[i]);
         i++;
       }
       // if no more data to read: parse error
@@ -102,8 +101,6 @@ Sms::Sms(GsmLine &gsmRawData, GsmLine &gsmText)
         break;
       }
       data[i] = '\0';
-      // pc.putc('\r');
-      // pc.putc('\n');
       t++;
       // If no more token to look for: we're good, exit
       if (t >= sizeof(delims))
