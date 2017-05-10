@@ -33,7 +33,7 @@ public:
 	  cmd(0),
 	  serial(0)
 	{
-
+	  sem_init(&lock, 0, 1);
 	}
 
   // Ctor to assign a command
@@ -43,47 +43,92 @@ public:
 	  lines(0),
 	  serial(s)
   {
-    if (_cmd)
+	sem_init(&lock, 0, 1);
+    if (_cmd) {
     	cmd = strdup(_cmd);
+    }
     else
     	cmd = 0;
   }
+
+  // Copy ctor
+  GsmCommand(GsmCommand *orig):
+	  status(orig->getStatus()),
+	  line_number(orig->getLineNumber()),
+	  serial(orig->getSerial()),
+	  lines(orig->getLine())
+  {
+	  sem_init(&lock, 0, 1);
+	  cmd = strdup(orig->getCmd());
+  }
+
   // Dtor
   ~GsmCommand() {
     if (lines) delete lines;
-    if (cmd)   free(cmd);
+    if (cmd)   {
+    	free(cmd);
+    	cmd = 0;
+    }
     line_number = 0;
+    sem_destroy(&lock);
+  }
+
+
+  inline int acquireLock() {
+	  return sem_wait(&lock);
+  }
+
+  inline int acquireLock(uint32_t timeout_ms) {
+	  struct timespec ts;
+	  ts.tv_sec = timeout_ms / 1000;
+	  ts.tv_nsec = (timeout_ms % 1000) * 1000000;
+	  return sem_timedwait(&lock, &ts);
+  }
+
+  inline int releaseLock() {
+	  return sem_post(&lock);
   }
 
   inline void reset() {
-    if (cmd) free(cmd);
+    if (cmd) {
+    	free(cmd);
+    	cmd = 0;
+    }
     if (lines) delete lines;
     lines = NULL;
     line_number = 0;
     status = GSM_NO_STATUS;
   }
 
-  inline void reset(const char *_cmd) {
-    if (cmd) free(cmd);
-    if (lines) delete lines;
-    lines = NULL;
-    line_number = 0;
-    status = GSM_NO_STATUS;
-    cmd = strdup(_cmd);
+  inline int reset(const char *_cmd) {
+    reset();
+    return setCmd(_cmd);
   }
 
   inline int process(int wait_before_read_us, int timeout_ms) {
 	  setStatus(GSM_NO_STATUS);
-	  if (sendCmdToSerial() < 0)
+	  if (sendCmdToSerial() < 0) {
+		  std::cerr << "Unable to send data to serial" << endl;
 		  return -1;
+	  }
 	  usleep(wait_before_read_us);
-	  return readFromSerial(timeout_ms);
+	  int n = readFromSerial(timeout_ms);
+	  return n;
   }
 
   inline int sendCmdToSerial() {
 	  if (!cmd || !serial)
 		  return -1;
 	  return serial->printfData("%s\r\n", cmd);
+  }
+
+  inline int sendRawBufToSerial(char *buf, int len) {
+	  if (!buf || !len) return -1;
+	  if (len == 1)
+		  std::cout << "Sending " << to_string(*buf) << endl;
+	  else
+		  std::cout << "Sending " << buf << endl;
+	  return serial->put(buf, len);
   }
 
   inline int readFromSerial(int timeout_ms) {
@@ -117,9 +162,12 @@ public:
   }
 
   inline int setCmd(const char *_cmd) {
-    if (cmd)
-      free(cmd);
-    cmd = strdup(_cmd);
+    if (cmd) {
+    	free(cmd);
+    }
+    if (_cmd) {
+    	cmd = strdup(_cmd);
+    }
     return 0;
   }
 
@@ -155,6 +203,13 @@ public:
     return lines;
   }
 
+  inline void setSerial(Serial *s) {
+	  serial = s;
+  }
+  inline Serial *getSerial() {
+	  return serial;
+  }
+
   inline int getLineNumber() {
     return line_number;
   }
@@ -166,12 +221,15 @@ public:
       lines->displayAll(s);
   }
 
+protected:
+
 private:
   char       *cmd;
   int         line_number;
   GsmLine    *lines;
   GsmStatus_t status;
   Serial     *serial;
+  sem_t       lock;
 };
 
 

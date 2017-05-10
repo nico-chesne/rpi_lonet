@@ -50,7 +50,7 @@ public:
 public:
 	// Manage
 	bool   initialize();
-	bool   isInitialized() { return is_initialized; }
+	inline bool   isInitialized() { return is_initialized; }
 	char const * const getSerialNumber() { return serial_number; };
 	bool   power(bool enable);
 	bool   isPowerUp();
@@ -59,11 +59,12 @@ public:
 	string getOperator();
 	bool   batteryInfoUpdate();
 	bool   batteryInfoGet(bool force_update, BatteryInfo_t *bat_info);
+	inline Serial &getSerial() { return serial; }
 
 	// Generic send. Cmd must be properly initialized with a Serial line and a command
-	bool atCmdSend(GsmCommand *cmd, int delay_before_read_answer_us);
+	bool atCmdSend(const char * at_cmd, int delay_before_read_answer_us);
 	// Generic send. GsmCommand will be created and must be deleted after usage
-	bool atCmdSend(const char *at_cmd, GsmCommand **command, int delay_before_read_answer_us);
+	bool atCmdSend(const char *at_cmd, int delay_before_read_answer_us, GsmCommand **command);
 
 	// Sms
 	bool      smsSetConfig(uint32_t config);
@@ -97,6 +98,7 @@ protected:
 	LinuxGpio     ri;
 
 	// Generic
+	GsmCommand    gsm_command;
 	char          pin[5];
 	bool          is_initialized;
 	char          serial_number[16];

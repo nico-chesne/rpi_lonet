@@ -37,11 +37,16 @@ void sms_callback(LonetSIM808 *lonet, Sms *sms)
 {
 	if (sms != 0) {
 		//sms->display(std::cout);
-		if (!strcmp(sms->getText(), "battery?")) {
+		if (!strcmp(sms->getText(), "ping?")) {
+			if (!lonet->smsSend(sms->getFrom(), "pong!")) {
+				std::cout << "Could not send battery status";
+			}
+		}
+		else if (!strcmp(sms->getText(), "battery?")) {
 			LonetSIM808::BatteryInfo_t info;
 			if (lonet->batteryInfoGet(true, &info)) {
 				char tmp[64];
-				snprintf(tmp, 64, "Battery info (%s): %d%% (%dmV)",
+				snprintf(tmp, 64, "Battery info (%s): %d/100 (%dmV)",
 						info.charge_status == LonetSIM808::BATTERY_CHARGING ? "charging" :
 								(info.charge_status == LonetSIM808::BATTERY_NOT_CHARGING ? "discharging" :
 										(info.charge_status == LonetSIM808::BATTERY_FINISHED_CHARGING ? "fully charged" : "unknown")
@@ -52,9 +57,10 @@ void sms_callback(LonetSIM808 *lonet, Sms *sms)
 				}
 			}
 		}
-		usleep(100*1000);
-		if (lonet)
-			lonet->smsDelete(sms->getIndex());
+		//usleep(100*1000);
+		lonet->getSerial().flush(100);
+		//if (lonet)
+			//lonet->smsDelete(sms->getIndex());
 	}
 }
 
@@ -202,7 +208,7 @@ int main(int argc, char **argv)
 		}
 
 		GsmCommand *cmd;
-		if (lonet.atCmdSend(argv[2], &cmd, 1000)) {
+		if (lonet.atCmdSend(argv[2], 1000, &cmd)) {
 			cmd->display(std::cout);
 		} else {
 			std::cerr << "Unable to send command " << argv[2] << endl;

@@ -10,7 +10,8 @@
 LonetSIM808::LonetSIM808(const char *serial_port_name, Gpio::gpio_id_t gpio_pwr, Gpio::gpio_id_t gpio_ri):
 	serial(serial_port_name, LONETSIM808_DEFAULT_SERIAL_SPEED),
 	pwr(gpio_pwr, Gpio::GPIO_FUNC_OUT),
-	ri(gpio_ri, Gpio::GPIO_FUNC_IN)
+	ri(gpio_ri, Gpio::GPIO_FUNC_IN),
+	gsm_command()
 {
 	ri.set_callback(LonetSIM808::riCallback, this, Gpio::GPIO_EDGE_FALLING, LONETSIM808_DEFAULT_RI_POLL_TIMEOUT);
 	memset(pin, 0, sizeof (pin));
@@ -23,6 +24,7 @@ LonetSIM808::LonetSIM808(const char *serial_port_name, Gpio::gpio_id_t gpio_pwr,
 	sem_init(&sms_monitoring, 0, 0);
 	sms_monitoring_thread = 0;
 	sms_callback = 0;
+	gsm_command.setSerial(&serial);
 }
 
 LonetSIM808::~LonetSIM808()
@@ -115,48 +117,64 @@ bool   LonetSIM808::initialize()
 	serial.flush(100);
 
 	// Initiate connection
-	GsmCommand cmd("AT", &serial);
-	if (cmd.process(LONETSIM808_DEFAULT_DELAY_BEFORE_READ_ANSWER_US, 100) != 0 || cmd.getStatus() != GsmCommand::GSM_OK) {
+	gsm_command.acquireLock();
+	gsm_command.reset("AT");
+	if (gsm_command.process(LONETSIM808_DEFAULT_DELAY_BEFORE_READ_ANSWER_US, 100) != 0 || gsm_command.getStatus() != GsmCommand::GSM_OK) {
 		std::cerr << "Unable to send command AT" << endl;
+		gsm_command.releaseLock();
 		return false;
 	}
+	gsm_command.releaseLock();
 
 	// Echo off
-	cmd.reset("ATE0");
-	if (cmd.process(LONETSIM808_DEFAULT_DELAY_BEFORE_READ_ANSWER_US, 100) != 0 || cmd.getStatus() != GsmCommand::GSM_OK) {
+	gsm_command.reset("ATE0");
+	gsm_command.acquireLock();
+	if (gsm_command.process(LONETSIM808_DEFAULT_DELAY_BEFORE_READ_ANSWER_US, 100) != 0 || gsm_command.getStatus() != GsmCommand::GSM_OK) {
 		std::cerr << "Unable to send command ATE0" << endl;
+		gsm_command.releaseLock();
 		return false;
 	}
+	gsm_command.releaseLock();
 
     // Request Manufacturer Identification
-	cmd.reset("AT+CGMI");
-	if (cmd.process(LONETSIM808_DEFAULT_DELAY_BEFORE_READ_ANSWER_US, 100) != 0 || cmd.getStatus() != GsmCommand::GSM_OK || cmd.getLineNumber() < 1) {
+	gsm_command.acquireLock();
+	gsm_command.reset("AT+CGMI");
+	if (gsm_command.process(LONETSIM808_DEFAULT_DELAY_BEFORE_READ_ANSWER_US, 100) != 0 || gsm_command.getStatus() != GsmCommand::GSM_OK || gsm_command.getLineNumber() < 1) {
 		std::cerr << "Unable to send command AT+CGMI" << endl;
+		gsm_command.releaseLock();
 		return false;
 	}
-	if (strcmp(cmd.getLine()->getData(), LONETSIM808_MANUF_ID) != 0) {
+	if (strcmp(gsm_command.getLine()->getData(), LONETSIM808_MANUF_ID) != 0) {
 		std::cerr << "This module is not a LONET SIM808 module!" << endl;
 		return false;
 	}
+	gsm_command.releaseLock();
 
     // Request Model Identification
-	cmd.reset("AT+CGMM");
-	if (cmd.process(LONETSIM808_DEFAULT_DELAY_BEFORE_READ_ANSWER_US, 100) != 0 || cmd.getStatus() != GsmCommand::GSM_OK || cmd.getLineNumber() < 1) {
+	gsm_command.acquireLock();
+	gsm_command.reset("AT+CGMM");
+	if (gsm_command.process(LONETSIM808_DEFAULT_DELAY_BEFORE_READ_ANSWER_US, 100) != 0 || gsm_command.getStatus() != GsmCommand::GSM_OK || gsm_command.getLineNumber() < 1) {
 		std::cerr << "Unable to send command AT+CGMM" << endl;
+		gsm_command.releaseLock();
 		return false;
 	}
-	if (strcmp(cmd.getLine()->getData(), LONETSIM808_MODEL_ID) != 0) {
-		std::cerr << "This module is not a LONET SIM808 module (" << cmd.getLine()->getData() << ")!" << endl;
+	if (strcmp(gsm_command.getLine()->getData(), LONETSIM808_MODEL_ID) != 0) {
+		std::cerr << "This module is not a LONET SIM808 module (" << gsm_command.getLine()->getData() << ")!" << endl;
+		gsm_command.releaseLock();
 		return false;
 	}
+	gsm_command.releaseLock();
 
     // Request Model Identification
-	cmd.reset("AT+CGSN");
-	if (cmd.process(LONETSIM808_DEFAULT_DELAY_BEFORE_READ_ANSWER_US, 100) != 0 || cmd.getStatus() != GsmCommand::GSM_OK || cmd.getLineNumber() < 1) {
+	gsm_command.acquireLock();
+	gsm_command.reset("AT+CGSN");
+	if (gsm_command.process(LONETSIM808_DEFAULT_DELAY_BEFORE_READ_ANSWER_US, 100) != 0 || gsm_command.getStatus() != GsmCommand::GSM_OK || gsm_command.getLineNumber() < 1) {
 		std::cerr << "Unable to send command AT+CGSN" << endl;
+		gsm_command.releaseLock();
 		return false;
 	}
-	strcpy(serial_number, cmd.getLine()->getData());
+	strcpy(serial_number, gsm_command.getLine()->getData());
+	gsm_command.releaseLock();
 
 	is_initialized = true;
 
@@ -171,6 +189,7 @@ bool   LonetSIM808::power(bool enable)
 		usleep(2500000);
 		pwr.set(0);
 	}
+	return true;
 }
 
 bool   LonetSIM808::isPowerUp()
@@ -183,39 +202,48 @@ bool   LonetSIM808::pinSet(const char *pin_code)
 	char tmp[32];
 
 	snprintf(tmp, sizeof (tmp), "AT+CPIN=%s", pin_code);
-	GsmCommand cmd(tmp, &serial);
-	if (cmd.process(LONETSIM808_DELAY_AFTER_PIN_SET_MS * 1000, 100) != 0) {
+	gsm_command.acquireLock();
+	gsm_command.reset(tmp);
+	if (gsm_command.process(LONETSIM808_DELAY_AFTER_PIN_SET_MS * 1000, 100) != 0) {
 		std:cerr << "Unable to set PIN" << endl;
+		gsm_command.releaseLock();
 		return false;
 	}
-	if (cmd.getStatus() == GsmCommand::GSM_ERROR) {
+	if (gsm_command.getStatus() == GsmCommand::GSM_ERROR) {
 		std::cerr << "Invalid PIN code " << pin_code << endl;
+		gsm_command.releaseLock();
 		return false;
 	}
+	gsm_command.releaseLock();
 	snprintf(pin, sizeof(pin), "%s", pin_code);
 	return true;
 }
 
 bool   LonetSIM808::isPinOk()
 {
-	GsmCommand cmd("AT+CPIN?", &serial);
-	if (cmd.process(LONETSIM808_DEFAULT_DELAY_BEFORE_READ_ANSWER_US, 100) == 0 && cmd.getStatus() == GsmCommand::GSM_OK && cmd.getLineNumber() >= 1) {
-		if (strcmp(cmd.getLine()->getData(), "+CPIN: READY") == 0) {
+	gsm_command.acquireLock();
+	gsm_command.reset("AT+CPIN?");
+	if (gsm_command.process(LONETSIM808_DEFAULT_DELAY_BEFORE_READ_ANSWER_US, 100) == 0 && gsm_command.getStatus() == GsmCommand::GSM_OK && gsm_command.getLineNumber() >= 1) {
+		if (strcmp(gsm_command.getLine()->getData(), "+CPIN: READY") == 0) {
+			gsm_command.releaseLock();
 			return true;
 		}
-		std::cerr << "Pin not ready, got " << cmd.getLine()->getData() << endl;
+		std::cerr << "Pin not ready, got " << gsm_command.getLine()->getData() << endl;
+		gsm_command.releaseLock();
 		return false;
 	}
 	std::cerr << "Something got wrong when requesting AT+CPIN?" << endl;
+	gsm_command.releaseLock();
 	return false;
 }
 
 string LonetSIM808::getOperator()
 {
-	GsmCommand cmd("AT+COPS?", &serial);
-	if (cmd.process(LONETSIM808_DEFAULT_DELAY_BEFORE_READ_ANSWER_US, 100) == 0 && cmd.getStatus() == GsmCommand::GSM_OK && cmd.getLineNumber() >= 1) {
+	gsm_command.acquireLock();
+	gsm_command.reset("AT+COPS?");
+	if (gsm_command.process(LONETSIM808_DEFAULT_DELAY_BEFORE_READ_ANSWER_US, 100) == 0 && gsm_command.getStatus() == GsmCommand::GSM_OK && gsm_command.getLineNumber() >= 1) {
 		char tmp[32] = { 0 };
-		char *answer = cmd.getLine()->getData();
+		char *answer = gsm_command.getLine()->getData();
 		// Should retrieve something like +COPS: 0,0,"Orange F"
 		int i;
 		for (i = 0; answer[i] && answer[i] != '"'; i++)
@@ -227,18 +255,22 @@ string LonetSIM808::getOperator()
 		int end = i;
 		strncpy(tmp, answer+start, 32);
 		tmp[end - start] = 0;
+		gsm_command.releaseLock();
 		return std::string(tmp);
 	}
 	std::cerr << "Could not retrieve Operator name" << endl;
+	gsm_command.releaseLock();
 	return std::string("");
 }
 
 bool   LonetSIM808::batteryInfoUpdate()
 {
 	int bcs, bcl, voltage;
-	GsmCommand cmd("AT+CBC", &serial);
-	if (cmd.process(LONETSIM808_DEFAULT_DELAY_BEFORE_READ_ANSWER_US, 100) == 0 && cmd.getStatus() == GsmCommand::GSM_OK && cmd.getLineNumber() >= 1) {
-		if (3 == sscanf(cmd.getLine()->getData(), "+CBC: %d,%d,%d", &bcs, &bcl, &voltage)) {
+
+	gsm_command.acquireLock();
+	gsm_command.reset("AT+CBC");
+	if (gsm_command.process(LONETSIM808_DEFAULT_DELAY_BEFORE_READ_ANSWER_US, 100) == 0 && gsm_command.getStatus() == GsmCommand::GSM_OK && gsm_command.getLineNumber() >= 1) {
+		if (3 == sscanf(gsm_command.getLine()->getData(), "+CBC: %d,%d,%d", &bcs, &bcl, &voltage)) {
 			switch(bcs) {
 				case 0:
 					battery_info.charge_status = BATTERY_NOT_CHARGING;
@@ -255,13 +287,16 @@ bool   LonetSIM808::batteryInfoUpdate()
 			}
 			battery_info.capacity = bcl;
 			battery_info.voltage = voltage;
+			gsm_command.releaseLock();
 			return true;
 		} else {
-			std::cerr << "Unable to parse battery status ()" << cmd.getLine()->getData() << endl;
+			std::cerr << "Unable to parse battery status ()" << gsm_command.getLine()->getData() << endl;
+			gsm_command.releaseLock();
 			return false;
 		}
 	} else {
 		std::cerr << "Unable to update battery status" << endl;
+		gsm_command.releaseLock();
 		return false;
 	}
 }
@@ -279,29 +314,37 @@ bool   LonetSIM808::batteryInfoGet(bool force_update, BatteryInfo_t *bat_info)
 
 
 // Generic
-bool LonetSIM808::atCmdSend(GsmCommand *command, int delay_before_read_answer_us)
+bool LonetSIM808::atCmdSend(const char * at_cmd, int delay_before_read_answer_us)
 {
-	if (!command) return false;
-	if (command->getStatus() != GsmCommand::GSM_NO_STATUS) return false;
-	if (!strcmp(command->getCmd(), "")) return false;
+	if (!at_cmd) return false;
 
-	if (command->process(delay_before_read_answer_us, 100) != 0) {
-		std::cerr << "Issue while processing command " << command->getCmd() << endl;
+	gsm_command.acquireLock();
+	gsm_command.reset(at_cmd);
+	if (gsm_command.getStatus() != GsmCommand::GSM_NO_STATUS) return false;
+
+	if (gsm_command.process(delay_before_read_answer_us, 100) != 0) {
+		std::cerr << "Issue while processing command " << gsm_command.getCmd() << endl;
+		gsm_command.releaseLock();
 		return false;
 	}
+	gsm_command.releaseLock();
 	return true;
 }
 
-bool LonetSIM808::atCmdSend(const char *at_cmd, GsmCommand **command, int delay_before_read_answer_us)
+bool LonetSIM808::atCmdSend(const char *at_cmd, int delay_before_read_answer_us, GsmCommand **command)
 {
 	if (!at_cmd) return false;
 	if (!command) return false;
-	*command = new GsmCommand(at_cmd, &serial);
-
-	if ((*command)->process(delay_before_read_answer_us, 100) != 0) {
-		std::cerr << "Issue while processing command " << (*command)->getCmd() << endl;
+	*command = 0;
+	gsm_command.acquireLock();
+	gsm_command.reset(at_cmd);
+	if (gsm_command.process(delay_before_read_answer_us, 100) != 0) {
+		std::cerr << "Issue while processing command " << gsm_command.getCmd() << endl;
+		gsm_command.releaseLock();
 		return false;
 	}
+	*command = new GsmCommand(this->gsm_command);
+	gsm_command.releaseLock();
 	return true;
 }
 
@@ -310,38 +353,36 @@ bool      LonetSIM808::smsSetConfig(uint32_t config)
 {
 	bool res = true;
 	char *at_command;
-	GsmCommand *gsm_command;
 
 	// AT+CNMI=<mode,mt, bm, ds, bfr>
 	if ((config & Sms::SMS_CONFIG_IMMEDIATE_DELIVER)) { //&& !(sms_config & Sms::SMS_CONFIG_IMMEDIATE_DELIVER)) {
 		at_command = "AT+CNMI=2,2,0,0,0";
 		bool cmd_res = true;
 
-		cmd_res = atCmdSend(at_command, &gsm_command, 1000);
+		cmd_res = atCmdSend(at_command, 1000);
 		if (!cmd_res) {
 			std::cerr << "Unable to send command '" << at_command << "' " << endl;
 			res = res && false;
-		} else if (gsm_command->getStatus() != GsmCommand::GSM_OK) {
-
+		} else if (gsm_command.getStatus() != GsmCommand::GSM_OK) {
+			std::cerr << "Command '" << at_command << "' returned GSM_ERROR" << endl;
+			res = res && false;
 		} else {
 			sms_config |= Sms::SMS_CONFIG_IMMEDIATE_DELIVER;
 		}
-		delete gsm_command;
 	}
 	else if (!(config & Sms::SMS_CONFIG_IMMEDIATE_DELIVER)) { // && (sms_config & Sms::SMS_CONFIG_IMMEDIATE_DELIVER)) {
 		at_command = "AT+CNMI=0,0,0,0,0";
 		bool cmd_res = true;
 
-		cmd_res = atCmdSend(at_command, &gsm_command, 1000);
+		cmd_res = atCmdSend(at_command, 1000);
 		if (!cmd_res) {
 			std::cerr << "Unable to send command '" << at_command << "' " << endl;
 			res = res && false;
-		} else if (gsm_command->getStatus() != GsmCommand::GSM_OK) {
+		} else if (gsm_command.getStatus() != GsmCommand::GSM_OK) {
 
 		} else {
 			sms_config &= ~Sms::SMS_CONFIG_IMMEDIATE_DELIVER;
 		}
-		delete gsm_command;
 	}
 
 	// AT+CMGF=<mode>
@@ -351,31 +392,29 @@ bool      LonetSIM808::smsSetConfig(uint32_t config)
 		at_command = "AT+CMGF=1";
 		bool cmd_res = true;
 
-		cmd_res = atCmdSend(at_command, &gsm_command, 1000);
+		cmd_res = atCmdSend(at_command, 1000);
 		if (!cmd_res) {
 			std::cerr << "Unable to send command '" << at_command << "' " << endl;
 			res = res && false;
-		} else if (gsm_command->getStatus() != GsmCommand::GSM_OK) {
+		} else if (gsm_command.getStatus() != GsmCommand::GSM_OK) {
 
 		} else {
 			sms_config |= Sms::SMS_CONFIG_MODE_TEXT;
 		}
-		delete gsm_command;
 	}
 	else if (!(config & Sms::SMS_CONFIG_MODE_TEXT)) { // && (sms_config & Sms::SMS_CONFIG_MODE_TEXT)) {
 		at_command = "AT+CMGF=0";
 		bool cmd_res = true;
 
-		cmd_res = atCmdSend(at_command, &gsm_command, 1000);
+		cmd_res = atCmdSend(at_command, 1000);
 		if (!cmd_res) {
 			std::cerr << "Unable to send command '" << at_command << "' " << endl;
 			res = res && false;
-		} else if (gsm_command->getStatus() != GsmCommand::GSM_OK) {
+		} else if (gsm_command.getStatus() != GsmCommand::GSM_OK) {
 
 		} else {
 			sms_config &= ~Sms::SMS_CONFIG_MODE_TEXT;
 		}
-		delete gsm_command;
 	}
 
 }
@@ -383,56 +422,54 @@ bool      LonetSIM808::smsSetConfig(uint32_t config)
 bool      LonetSIM808::smsUpdateList()
 {
 
-  int i;
-  GsmLine *l;
-  GsmCommand *cmd;
+	int i;
+	GsmLine *l;
 
-  // Clean up the current tab
-  for (i = 0; i < sms_received_number; i++) delete sms_received_list[i];
-  free(sms_received_list);
-  sms_received_list = NULL;
-  sms_received_number = 0;
+	// Clean up the current tab
+	for (i = 0; i < sms_received_number; i++) delete sms_received_list[i];
+	free(sms_received_list);
+	sms_received_list = NULL;
+	sms_received_number = 0;
 
-  // Retrieve all sms from the module
-  cmd = new GsmCommand("AT+CMGL=\"ALL\"", &serial);
-  cmd->process(50*1000, 100);
+	// Retrieve all sms from the module
+	gsm_command.acquireLock();
+	gsm_command.reset("AT+CMGL=\"ALL\"");
+	gsm_command.process(50*1000, 100);
 
-  // Lock answer again coz we need it before someone else send a command"
-  if (cmd->getStatus() != GsmCommand::GSM_OK) {
-	  // Problem with execution of command
-	  std::cerr << "Unable to get sms list from TE: " << to_string(cmd->getStatus()) << endl;
-	  delete cmd;
-	  return false;
-  }
+	// Lock answer again coz we need it before someone else send a command"
+	if (gsm_command.getStatus() != GsmCommand::GSM_OK) {
+		// Problem with execution of command
+		std::cerr << "Unable to get sms list from TE: " << to_string(gsm_command.getStatus()) << endl;
+		gsm_command.releaseLock();
+		return false;
+	}
 
-  if (cmd->getLineNumber() % 2 != 0) {
-	// Problem with answer: we should have a number of lines multiple of 2
-	  std::cerr << "Line number received is not even (" << to_string(cmd->getLineNumber()) << ")" <<endl;
-	  delete cmd;
-	  return false;
-  }
-  i = cmd->getLineNumber() / 2;
-  if (i == 0)
-  {
-	  std::cerr << "No sms received" << endl;
-	  delete cmd;
-	  return true;
-  }
-  sms_received_list = (Sms **)malloc(sizeof (Sms*) * i);
+	if (gsm_command.getLineNumber() % 2 != 0) {
+		// Problem with answer: we should have a number of lines multiple of 2
+		std::cerr << "Line number received is not even (" << to_string(gsm_command.getLineNumber()) << ")" <<endl;
+		gsm_command.releaseLock();
+		return false;
+	}
+	i = gsm_command.getLineNumber() / 2;
+	if (i == 0)
+	{
+		std::cerr << "No sms received" << endl;
+		gsm_command.releaseLock();
+		return true;
+	}
+	sms_received_list = (Sms **)malloc(sizeof (Sms*) * i);
 
-  // Should no be NULL
-  i = 0;
-  l = cmd->getLine();
-  while (l != NULL)
-  {
+	// Should no be NULL
+	i = 0;
+	l = gsm_command.getLine();
+	while (l != NULL)
+	{
 	if (l->getNext() == NULL) {
 		// FATAL: how could we reach this point ??
 		std::cerr << "This is odd... Should have a NULL next pointer" << endl;
-		delete cmd;
+		gsm_command.releaseLock();
 		return false;
 	}
-	// LONET_DEBUG(this, "%s: adding sms %d with following data:\r\n%s\r\n%s\r\n",
-	//             __FUNCTION__, i, l->getData(), l->getNext()->getData());
 	// Create the new Sms entry with the super clever Sms Ctor
 	sms_received_list[i] = new Sms(*l, *l->getNext());
 
@@ -440,9 +477,10 @@ bool      LonetSIM808::smsUpdateList()
 	l = l->getNext()->getNext();;
 	sms_received_number++;
 	i++;
-  }
+	}
 
-  return true;
+	gsm_command.releaseLock();
+	return true;
 }
 
 uint32_t  LonetSIM808::smsGetNumber()
@@ -492,36 +530,38 @@ bool      LonetSIM808::smsDelete(uint32_t te_index)
 bool      LonetSIM808::smsDeleteFromTabIndex(uint32_t tab_index)
 {
 	char at_cmd[16];
-	GsmCommand *gsm_cmd;
 
 	if (tab_index >= sms_received_number) {
 		std::cerr << "TE index not found than sms received number (" << to_string(sms_received_number) << ")" << endl;
 		return false;
 	}
 	snprintf(at_cmd, 16, "AT+CMGD=%d", sms_received_list[tab_index]->getIndex());
-	gsm_cmd = new GsmCommand(at_cmd, &serial);
-	if (gsm_cmd->process(1000, 50) < 0) {
+	gsm_command.acquireLock();
+	gsm_command.reset(at_cmd);
+	if (gsm_command.process(1000, 50) < 0) {
 		std::cerr << "Unable to process command " << at_cmd << endl;
-		delete gsm_cmd;
+		gsm_command.releaseLock();
 		return false;
 	}
-	if (gsm_cmd->getStatus() != GsmCommand::GSM_OK) {
+	if (gsm_command.getStatus() != GsmCommand::GSM_OK) {
 		std::cerr << "Error returned by command " << at_cmd << endl;
-		delete gsm_cmd;
+		gsm_command.releaseLock();
 		return false;
 	}
+	gsm_command.releaseLock();
 	return true;
 }
 
 
 bool      LonetSIM808::smsDeleteAll()
 {
+	gsm_command.acquireLock();
 	for (int i = 0; i < sms_received_number; i++) {
 		char at_cmd[16];
 		GsmCommand *gsm_cmd;
 
 		snprintf(at_cmd, 16, "AT+CMGD=%d", sms_received_list[i]->getIndex());
-		gsm_cmd = new GsmCommand(at_cmd, &serial);
+		gsm_command.reset(at_cmd);
 		if (gsm_cmd->process(1000, 50) < 0) {
 			// Only warning here...
 			std::cerr << "Unable to process command " << at_cmd << endl;
@@ -533,6 +573,7 @@ bool      LonetSIM808::smsDeleteAll()
 	}
 	free(sms_received_list);
 	sms_received_number = 0;
+	gsm_command.releaseLock();
 	return true;
 }
 
@@ -549,23 +590,30 @@ bool      LonetSIM808::smsSend(const char *number, const char *message)
 		return false;
 	}
 	GsmLine *lines;
-	char tmp[32];
+	char cmd[32], c = 0x1A;
+	int len = strlen(message);
 
-	snprintf(tmp, 32, "AT+CMGS=\"%s\"\r\n", number);
-	//std::cout << "Sending '" << tmp << "'" << endl;
-	serial.put(tmp, strlen(tmp));
-	usleep(1000);
-	lines = serial.readGsmLine(50);
-	if (lines) {
-		delete lines;
+	snprintf(cmd, 32, "AT+CMGS=\"%s\"", number);
+	gsm_command.acquireLock();
+	gsm_command.reset(cmd);
+	if (gsm_command.process(1000, 50) < 0) {
+		// Only warning here...
+		//std::cerr << "nothing returned " << cmd << endl;
 	}
-
-	serial.printfData("%s", message);
-	serial.put((char)0x1A);
-	lines = serial.readGsmLine(100);
-	if (lines) {
-		delete lines;
+	gsm_command.reset();
+	usleep(50*1000);
+	if (gsm_command.sendRawBufToSerial((char *)message, strlen(message)) < 0) {
+		std::cerr << "Unable send message to TE" << endl;
+		gsm_command.releaseLock();
+		return false;
 	}
+	if (gsm_command.sendRawBufToSerial(&c, 1) < 0) {
+		std::cerr << "Unable final char to TE" << endl;
+		gsm_command.releaseLock();
+		return false;
+	}
+	gsm_command.readFromSerial(50);
+	gsm_command.releaseLock();
 	return true;
 }
 

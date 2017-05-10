@@ -45,6 +45,21 @@ public:
     };
     next = _next;
   }
+
+  // Ctor to copy another GsmLine object
+  GsmLine(GsmLine *orig):
+	  length(0),
+	  next(0),
+	  line(0)
+  {
+	  if (orig->getData()) {
+		  line = strdup(orig->getData());
+		  length = orig->length;
+	  }
+	  if (orig->getNext())
+		  next = new GsmLine(orig->getNext());
+  }
+
   // Dtor
   ~GsmLine() {
     if (line)  free(line);
