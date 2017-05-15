@@ -68,14 +68,14 @@ public:
 
 	// Sms
 	bool      smsSetConfig(uint32_t config);
-	bool      smsUpdateList();
+	bool      smsUpdateList(bool unread_only);
 	uint32_t  smsGetNumber();
 	Sms      *smsGet(uint32_t index);
 	Sms      *smsGetLast();
 	bool      smsDelete(uint32_t te_index);
 	bool      smsDeleteFromTabIndex(uint32_t tab_index);
 	bool      smsDeleteAll();
-	bool      smsSend(const char *number, const char *message);
+	bool      smsSend(const char *number, const char *message, uint32_t *sms_id);
 	bool 	  smsDisplayAll(std::ostream &out);
 	bool	  smsCallbackInstall(lonetsim808_sms_callback_t cb);
 	bool	  smsCallbackUninstall();

@@ -46,14 +46,16 @@ void LonetSIM808::riCallback(void *param)
 	LonetSIM808 *lonet = (LonetSIM808 *)param;
 
 	//std::cout << "ri callback !" << endl;
+	uint32_t sms_number = lonet->smsGetNumber();
 	usleep(200 * 1000);
-	lonet->smsUpdateList();
+	lonet->smsUpdateList(true);
 	lonet->smsGetLast()->display(std::cout);
-	if (lonet->smsGetNumber() > 0) {
-		//std::cout << "posting sms_monitoring" << endl;
+	if (lonet->smsGetNumber() != sms_number) {
+		usleep(1000 * 1000);
+		std::cout << "posting sms_monitoring" << endl;
 		sem_post(&lonet->sms_monitoring);
 	} else {
-		//std::cout << "Something got wrong: no sms received" << endl;
+		std::cout << "Something got wrong: no new sms received" << endl;
 	}
 }
 
@@ -416,25 +418,34 @@ bool      LonetSIM808::smsSetConfig(uint32_t config)
 			sms_config &= ~Sms::SMS_CONFIG_MODE_TEXT;
 		}
 	}
-
+	return res;
 }
 
-bool      LonetSIM808::smsUpdateList()
+bool      LonetSIM808::smsUpdateList(bool unread_only)
 {
 
 	int i;
 	GsmLine *l;
 
-	// Clean up the current tab
-	for (i = 0; i < sms_received_number; i++) delete sms_received_list[i];
-	free(sms_received_list);
-	sms_received_list = NULL;
-	sms_received_number = 0;
+	// If we want to force fetching of ALL sms, clean up current list
+	if (!unread_only) {
+		// Clean up the current tab
+		for (i = 0; i < sms_received_number; i++) delete sms_received_list[i];
+		if (sms_received_number > 0) {
+			free(sms_received_list);
+			sms_received_list = NULL;
+			sms_received_number = 0;
+		}
+	}
 
 	// Retrieve all sms from the module
 	gsm_command.acquireLock();
-	gsm_command.reset("AT+CMGL=\"ALL\"");
-	gsm_command.process(50*1000, 100);
+	if (unread_only) {
+		gsm_command.reset("AT+CMGL=\"REC UNREAD\"");
+	} else {
+		gsm_command.reset("AT+CMGL=\"ALL\"");
+	}
+	gsm_command.process(200*1000, 400);
 
 	// Lock answer again coz we need it before someone else send a command"
 	if (gsm_command.getStatus() != GsmCommand::GSM_OK) {
@@ -444,39 +455,64 @@ bool      LonetSIM808::smsUpdateList()
 		return false;
 	}
 
+	// Check that we have an even number of sms, since one SMS takes two lines:
+	//
+	// +CMGL: 9,"REC UNREAD","XXXXXXXXX","","14/10/16,21:40:08+08"
+    // sms text content
+	//
 	if (gsm_command.getLineNumber() % 2 != 0) {
 		// Problem with answer: we should have a number of lines multiple of 2
 		std::cerr << "Line number received is not even (" << to_string(gsm_command.getLineNumber()) << ")" <<endl;
+		l = gsm_command.getLine();
+		while (l != NULL) {
+			std::cout << l->getData() << endl;
+			l = l->getNext();
+		}
 		gsm_command.releaseLock();
 		return false;
 	}
 	i = gsm_command.getLineNumber() / 2;
+
+	// No new sms received
 	if (i == 0)
 	{
-		std::cerr << "No sms received" << endl;
+		std::cerr << "No new sms received" << endl;
 		gsm_command.releaseLock();
 		return true;
 	}
-	sms_received_list = (Sms **)malloc(sizeof (Sms*) * i);
 
-	// Should no be NULL
-	i = 0;
+	// If we only want an update, we need to allocate a new table and copy old sms to this new table
+	if (unread_only) {
+		// Allocate new table to hold old sms + new sms
+		Sms **table_temp = (Sms **)malloc(sizeof (Sms*) * (i + sms_received_number));
+		for (i = 0; i < sms_received_number; i++)
+			table_temp[i] = sms_received_list[i];
+		free(sms_received_list);
+		sms_received_list = table_temp;
+		// We keep i = last index, to add new sms at end of table
+	} else {
+		sms_received_list = (Sms **)malloc(sizeof (Sms*) * i);
+		i = 0;
+	}
+
+
+	// Now, create new Sms objects at end of list, with content of what is read
 	l = gsm_command.getLine();
 	while (l != NULL)
 	{
-	if (l->getNext() == NULL) {
-		// FATAL: how could we reach this point ??
-		std::cerr << "This is odd... Should have a NULL next pointer" << endl;
-		gsm_command.releaseLock();
-		return false;
-	}
-	// Create the new Sms entry with the super clever Sms Ctor
-	sms_received_list[i] = new Sms(*l, *l->getNext());
+		if (l->getNext() == NULL) {
+			// FATAL: how could we reach this point ??
+			std::cerr << "This is odd... Should not have a NULL next pointer" << endl;
+			gsm_command.releaseLock();
+			return false;
+		}
+		// Create the new Sms entry with the super clever Sms Ctor
+		sms_received_list[i] = new Sms(*l, *l->getNext());
 
-	// Fill up next Sms object
-	l = l->getNext()->getNext();;
-	sms_received_number++;
-	i++;
+		// Fill up next Sms object
+		l = l->getNext()->getNext();;
+		sms_received_number++;
+		i++;
 	}
 
 	gsm_command.releaseLock();
@@ -507,10 +543,6 @@ bool      LonetSIM808::smsDelete(uint32_t te_index)
 {
 	int i;
 
-	if (smsUpdateList() == false) {
-		std::cerr << "Unable to update sms list before deletion" << endl;
-		return false;
-	}
 	for (i = 0; i < sms_received_number; i++) {
 		if (sms_received_list[i]->getIndex() == te_index)
 			break;
@@ -520,7 +552,7 @@ bool      LonetSIM808::smsDelete(uint32_t te_index)
 		return false;
 	}
 
-	if (smsUpdateList() == false) {
+	if (smsUpdateList(true) == false) {
 		std::cerr << "Unable to update sms list after deletion" << endl;
 		return false;
 	}
@@ -538,7 +570,7 @@ bool      LonetSIM808::smsDeleteFromTabIndex(uint32_t tab_index)
 	snprintf(at_cmd, 16, "AT+CMGD=%d", sms_received_list[tab_index]->getIndex());
 	gsm_command.acquireLock();
 	gsm_command.reset(at_cmd);
-	if (gsm_command.process(1000, 50) < 0) {
+	if (gsm_command.process(20*1000, 50) < 0) {
 		std::cerr << "Unable to process command " << at_cmd << endl;
 		gsm_command.releaseLock();
 		return false;
@@ -584,7 +616,7 @@ bool LonetSIM808::smsDisplayAll(std::ostream &out)
 	return true;
 }
 
-bool      LonetSIM808::smsSend(const char *number, const char *message)
+bool      LonetSIM808::smsSend(const char *number, const char *message, uint32_t *sms_id)
 {
 	if (!number || !message) {
 		return false;
@@ -612,9 +644,23 @@ bool      LonetSIM808::smsSend(const char *number, const char *message)
 		gsm_command.releaseLock();
 		return false;
 	}
-	gsm_command.readFromSerial(50);
-	gsm_command.releaseLock();
-	return true;
+	int trials = 0;
+	while (gsm_command.getLineNumber() == 0 && trials < 50) {
+		gsm_command.readFromSerial(100);
+		usleep(200*1000);
+		trials++;
+	}
+	if (trials < 50 && !strncmp("+CMGS:", gsm_command.getLine()->getData(), 6)) {
+		std::cout << "SMS Delivered (id: " << gsm_command.getLine()->getData()+7 << ")" << endl;
+		if (sms_id)
+			*sms_id = atoi(gsm_command.getLine()->getData() + 7);
+		gsm_command.releaseLock();
+		return true;
+	} else {
+		std::cout << "Not sure sms was delivered... waited 10s, but got no answer from TE" << endl;
+		gsm_command.releaseLock();
+		return false;
+	}
 }
 
 

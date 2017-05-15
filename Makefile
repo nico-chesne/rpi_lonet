@@ -11,7 +11,7 @@ CFLAGS = -g -O0 -I$(INCLUDE) -std=c++11
 LDFLAGS = -lpthread
 
 HEADERS = 
-OBJECTS = src/rpi_gsm.o src/Gpio.o src/LinuxGpio.o src/Sms.o src/Serial.o src/LonetSIM808.o
+OBJECTS = src/rpi_gsm.o src/Gpio.o src/LinuxGpio.o src/Sms.o src/Serial.o src/LonetSIM808.o src/ServerCommand.o
 
 RPI_IP = 192.168.0.145
 RPI_USER=pi

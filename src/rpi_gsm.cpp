@@ -3,7 +3,6 @@
 // Author      : 
 // Version     :
 // Copyright   : 
-// Description : Hello World in C++, Ansi-style
 //============================================================================
 
 #include <iostream>
@@ -14,54 +13,16 @@
 #include <Serial.h>
 #include <GsmCommand.h>
 #include <LonetSIM808.h>
+#include <ServerCommand.h>
 
 using namespace std;
 
+ServerCommand server;
 
-void ri_callback(void *param)
-{
-	LinuxGpio *gpio = (LinuxGpio*)param;
-	if (param != NULL)
-		cout << "RI int triggered on Gpio "<< gpio->getId() << " !\n";
-	else
-		cout << "RI int triggered on unknown gpio !\n";
-
-	Serial serial("/dev/ttyAMA0", 115200);
-
-	GsmCommand cmd("AT+CMGL=\"ALL\"", &serial);
-	cmd.process(100*1000, 200);
-	cmd.display(std::cout);
-}
 
 void sms_callback(LonetSIM808 *lonet, Sms *sms)
 {
-	if (sms != 0) {
-		//sms->display(std::cout);
-		if (!strcmp(sms->getText(), "ping?")) {
-			if (!lonet->smsSend(sms->getFrom(), "pong!")) {
-				std::cout << "Could not send battery status";
-			}
-		}
-		else if (!strcmp(sms->getText(), "battery?")) {
-			LonetSIM808::BatteryInfo_t info;
-			if (lonet->batteryInfoGet(true, &info)) {
-				char tmp[64];
-				snprintf(tmp, 64, "Battery info (%s): %d/100 (%dmV)",
-						info.charge_status == LonetSIM808::BATTERY_CHARGING ? "charging" :
-								(info.charge_status == LonetSIM808::BATTERY_NOT_CHARGING ? "discharging" :
-										(info.charge_status == LonetSIM808::BATTERY_FINISHED_CHARGING ? "fully charged" : "unknown")
-								),
-						info.capacity, info.voltage);
-				if (!lonet->smsSend(sms->getFrom(), tmp)) {
-					std::cout << "Could not send battery status";
-				}
-			}
-		}
-		//usleep(100*1000);
-		lonet->getSerial().flush(100);
-		//if (lonet)
-			//lonet->smsDelete(sms->getIndex());
-	}
+	server.commandProcessFromSms(lonet, sms);
 }
 
 #define MY_LONET_SIM_PIN "1234"
@@ -152,6 +113,7 @@ int main(int argc, char **argv)
 	// ------------------------
 	if (!strcmp(argv[1], "sms"))
 	{
+		uint32_t sms_id = 0;
 		if (argc < 3) {
 			printf("Error: expected phone number\n");
 			exit(1);
@@ -162,7 +124,10 @@ int main(int argc, char **argv)
 		}
 
 		printf("Sending msg '%s' to '%s'\n", argv[3], argv[2]);
-		lonet.smsSend(argv[2], argv[3]);
+		if (lonet.smsSend(argv[2], argv[3], &sms_id))
+			printf("Got id '%d'\n", sms_id);
+		lonet.smsUpdateList(false);
+		lonet.smsDisplayAll(std::cout);
 		exit (0);
 	}
 
@@ -170,7 +135,7 @@ int main(int argc, char **argv)
 	// ------------------------
 	if (!strcmp(argv[1], "list_sms"))
 	{
-		lonet.smsUpdateList();
+		lonet.smsUpdateList(false);
 		lonet.smsDisplayAll(std::cout);
 		return 0;
 	}
@@ -179,7 +144,12 @@ int main(int argc, char **argv)
 	// ------------------------
 	if (!strcmp(argv[1], "receive_sms"))
 	{
+		lonet.initialize();
+		server.commandRegister("ping", &ServerCommand::commandPing);
+		server.commandRegister("battery", &ServerCommand::commandBattery);
+		server.commandRegister("location", &ServerCommand::commandLocation);
 		lonet.smsCallbackInstall(sms_callback);
+		lonet.smsUpdateList(false);
 
 		while (true) {
 			std::cout << "Waiting for new sms" << endl;
@@ -196,6 +166,7 @@ int main(int argc, char **argv)
 			cout << "Missing sms index\n";
 			exit(1);
 		}
+		lonet.smsUpdateList(false);
 		lonet.smsDelete(atoi(argv[2]));
 		return 0;
 	}

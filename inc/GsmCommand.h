@@ -124,10 +124,12 @@ public:
 
   inline int sendRawBufToSerial(char *buf, int len) {
 	  if (!buf || !len) return -1;
+#if 0
 	  if (len == 1)
 		  std::cout << "Sending " << to_string(*buf) << endl;
 	  else
 		  std::cout << "Sending " << buf << endl;
+#endif
 	  return serial->put(buf, len);
   }
 
@@ -140,15 +142,22 @@ public:
 	  line_number = 0;
 	  l = serial->readGsmLine(timeout_ms);
 	  if (!l) {
+		  //std::cout << __func__ << "(): Got 0 line" << endl;
 		  return -1;
 	  }
 	  while (l) {
-		  if (!strcmp(l->getData(), "OK"))
+		  if (!strcmp(l->getData(), "OK")) {
+			  //std::cout << "Got OK" << endl;
 			  setStatus(GSM_OK);
-		  else if (!strcmp(l->getData(), "ERROR"))
+		  }
+		  else if (!strcmp(l->getData(), "ERROR")) {
+			  //std::cout << "Got ERROR" << endl;
 			  setStatus(GSM_ERROR);
-		  else
+		  }
+		  else {
+			  //std::cout << "Got line '" << l->getData() << "'" << endl;
 			  addLine(l->getData());
+		  }
 		  l = l->getNext();
 	  }
 	  delete l;

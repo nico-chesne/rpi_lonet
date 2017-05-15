@@ -123,6 +123,7 @@ GsmLine *Serial::readGsmLine(unsigned int timeout_ms)
 	GsmLine *res = NULL;
 	char *tmp = NULL, c;
 	int pos = 0;
+	int got_data = 0;
 	ReadStatus_t status = READ_GETTING_LINE;
 
 	// Allocate temp buf;
@@ -134,9 +135,12 @@ GsmLine *Serial::readGsmLine(unsigned int timeout_ms)
 	memset(tmp, 0, GSM_LINE_MAX_LENGTH);
 
 	// Read all chars from serial
+	//std::cout << "Waiting for data for " << to_string(timeout_ms) << "ms" << endl;
 	while (selectData(timeout_ms) > 0)
 	{
+		got_data++;
 		readData(&c, 1);
+		//std::cout << "got '" << c << "'" <<endl;
 		switch (status)
 		{
 		case READ_GETTING_LINE:
@@ -198,7 +202,7 @@ GsmLine *Serial::readGsmLine(unsigned int timeout_ms)
 			break;
 		}
 	}
-
+	//std::cout << "Got " << to_string(got_data) << " chars" <<endl;
 	free(tmp);
 	return res;
 }
