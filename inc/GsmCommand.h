@@ -55,9 +55,12 @@ public:
   GsmCommand(GsmCommand *orig):
 	  status(orig->getStatus()),
 	  line_number(orig->getLineNumber()),
-	  serial(orig->getSerial()),
-	  lines(orig->getLine())
+	  serial(orig->getSerial())
   {
+	  if (orig->getLine())
+		  lines = new GsmLine(orig->getLine());
+	  else
+		  lines = 0;
 	  sem_init(&lock, 0, 1);
 	  cmd = strdup(orig->getCmd());
   }

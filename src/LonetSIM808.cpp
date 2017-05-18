@@ -315,6 +315,12 @@ bool   LonetSIM808::batteryInfoGet(bool force_update, BatteryInfo_t *bat_info)
 }
 
 
+bool   LonetSIM808::getDateTime(struct timeval &tv)
+{
+	//FIXME: todo
+	return true;
+}
+
 // Generic
 bool LonetSIM808::atCmdSend(const char * at_cmd, int delay_before_read_answer_us)
 {
@@ -345,7 +351,7 @@ bool LonetSIM808::atCmdSend(const char *at_cmd, int delay_before_read_answer_us,
 		gsm_command.releaseLock();
 		return false;
 	}
-	*command = new GsmCommand(this->gsm_command);
+	*command = new GsmCommand(&this->gsm_command);
 	gsm_command.releaseLock();
 	return true;
 }
@@ -667,27 +673,129 @@ bool      LonetSIM808::smsSend(const char *number, const char *message, uint32_t
 // GPS
 bool LonetSIM808::gpsOpen()
 {
-
+	return gpsTogglePwr(true);
 }
 
 bool LonetSIM808::gpsClose()
 {
-
+	return gpsTogglePwr(false);
 }
 
-bool LonetSIM808::gpsReset()
+bool LonetSIM808::gpsTogglePwr(bool toggle)
 {
+	GsmCommand *command = 0;
+	char at_cmd[16];
+
+	snprintf(at_cmd, sizeof(at_cmd), "AT+CGPSPWR=%d", (int) toggle);
+	if (!atCmdSend(at_cmd, 20, &command) || !command) {
+		std::cout << "Cannot send command " << at_cmd << endl;
+		if (command) {
+			delete command;
+		}
+		return false;
+	}
+	if (command->getStatus() != GsmCommand::GSM_OK) {
+		std::cout << "Something got wrong with command " << at_cmd << endl;
+		delete command;
+		return false;
+	}
+	delete command;
+	return true;
+}
+
+bool LonetSIM808::gpsReset(bool hot)
+{
+	GsmCommand *command = 0;
+	char at_cmd[16];
+
+	snprintf(at_cmd, sizeof(at_cmd), "AT+CGPSRST=%d", (int) hot);
+	if (!atCmdSend(at_cmd, 20, &command) || !command) {
+		std::cout << "Cannot send command " << at_cmd << endl;
+		if (command) {
+			delete command;
+		}
+		return false;
+	}
+	if (command->getStatus() != GsmCommand::GSM_OK) {
+		std::cout << "Something got wrong with command " << at_cmd << endl;
+		delete command;
+		return false;
+	}
+	delete command;
+	return true;
 
 }
 
 bool LonetSIM808::gpsGetStatus(bool *gpsHasSignal)
 {
+	GsmCommand *command = 0;
+	char at_cmd[16];
+
+	if (!gpsHasSignal) {
+		std::cout << "Invalid parameter" <<endl;
+		return false;
+	}
+
+	snprintf(at_cmd, sizeof(at_cmd), "AT+CGPSSTATUS?");
+	if (!atCmdSend(at_cmd, 20, &command) || !command) {
+		std::cout << "Cannot send command " << at_cmd << endl;
+		if (command) {
+			delete command;
+		}
+		return false;
+	}
+	if (command->getStatus() != GsmCommand::GSM_OK) {
+		std::cout << "Something got wrong with command " << at_cmd << endl;
+		delete command;
+		return false;
+	}
+	if (command->getLineNumber() == 0) {
+		std::cout << "Oops, command answer has 0 line..." <<endl;
+		delete command;
+		return false;
+	}
+	if (!strcmp(command->getLine()->getData(), "+CGPSSTATUS: Location Not Fix")) {
+		*gpsHasSignal = false;
+	}
+	else if (!strcmp(command->getLine()->getData(), "+CGPSSTATUS: Location 3D Fix")) {
+		*gpsHasSignal = true;
+	}
+	delete command;
+	return true;
 
 }
 
-bool LonetSIM808::gpsReadInfo(char **location, uint32_t *length)
+bool LonetSIM808::gpsReadInfo(char **answer, LonetSIM808::GpsMode_t mode)
 {
+	GsmCommand *command = 0;
+	char at_cmd[16];
 
+	if (!answer) {
+		std::cout << "Invalid parameter" <<endl;
+		return false;
+	}
+
+	snprintf(at_cmd, sizeof(at_cmd), "AT+CGPSINF=%d", (uint32_t)mode);
+	if (!atCmdSend(at_cmd, 20, &command) || !command) {
+		std::cout << "Cannot send command " << at_cmd << endl;
+		if (command) {
+			delete command;
+		}
+		return false;
+	}
+	if (command->getStatus() != GsmCommand::GSM_OK) {
+		std::cout << "Something got wrong with command " << at_cmd << endl;
+		delete command;
+		return false;
+	}
+	if (command->getLineNumber() == 0) {
+		std::cout << "Oops, command answer has 0 line..." <<endl;
+		delete command;
+		return false;
+	}
+	*answer = strdup(command->getLine()->getData());
+	delete command;
+	return true;
 }
 
 

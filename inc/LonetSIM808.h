@@ -38,6 +38,28 @@ public:
 		uint32_t       voltage;
 	} BatteryInfo_t;
 
+	typedef struct {
+		float longitude;
+		float latitude;
+		float altitude;
+		float utc_time; // THe format is yyyymmddHHMMSS
+		int   ttff;     // time to first fix (in seconds)
+		int   num;      // Satellites in view for fix
+		float speed;    // speed over ground
+		float course;  // course over ground
+	} GpsInfo_t;
+
+	typedef enum {
+		GPS_MODE_0   = 0,
+		GPS_MODE_GGA = 1 << 1,
+		GPS_MODE_GLL = 1 << 2,
+		GPS_MODE_GSA = 1 << 3,
+		GPS_MODE_GSV = 1 << 4,
+		GPS_MODE_RMC = 1 << 5,
+		GPS_MODE_VTG = 1 << 6,
+		GPS_MODE_ZDA = 1 << 7,
+	} GpsMode_t;
+
 	typedef void (lonetsim808_sms_callback_t)(LonetSIM808 *lonet, Sms *sms);
 
 public:
@@ -60,6 +82,7 @@ public:
 	bool   batteryInfoUpdate();
 	bool   batteryInfoGet(bool force_update, BatteryInfo_t *bat_info);
 	inline Serial &getSerial() { return serial; }
+	bool   getDateTime(struct timeval &tv);
 
 	// Generic send. Cmd must be properly initialized with a Serial line and a command
 	bool atCmdSend(const char * at_cmd, int delay_before_read_answer_us);
@@ -83,12 +106,13 @@ public:
 	// GPS
 	bool gpsOpen();
 	bool gpsClose();
-	bool gpsReset();
+	bool gpsReset(bool hot);
 	bool gpsGetStatus(bool *gpsHasSignal);
-	bool gpsReadInfo(char **location, uint32_t *length);
+	bool gpsReadInfo(char **answer, LonetSIM808::GpsMode_t mode);
 
 protected:
 	static void *sms_monitoring_task(void *g);
+	bool gpsTogglePwr(bool toggle);
 
 
 protected:
