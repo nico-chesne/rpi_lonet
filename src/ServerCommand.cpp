@@ -4,7 +4,11 @@
  *  Created on: May 15, 2017
  *      Author: nico
  */
-
+#include <stdio.h>
+#include <stdlib.h>
+#include <unistd.h>
+#include <sys/types.h>
+#include <sys/wait.h>
 #include "ServerCommand.h"
 
 ServerCommand::ServerCommand() {
@@ -213,6 +217,46 @@ bool ServerCommand::commandLocation(LonetSIM808 *lonet, server_answer_t *answer)
 	}
 
 	snprintf(answer->content, sizeof (answer->content), "No location so far");
+	answer->length = strlen(answer->content);
+	std::cout << __func__ << "(). Sending '" << answer->content << "'" << endl;
+	return true;
+}
+
+
+bool ServerCommand::commandTimelapseStatus(LonetSIM808 *lonet, server_answer_t *answer) {
+
+	if (!lonet || !answer) {
+		std::cout << "Invalid parameter" << endl;
+		return false;
+	}
+
+	int link[2];
+	pid_t pid;
+	char out[160];
+
+	if (pipe(link) < 0) {
+		std::cout << "Could not create pipe" << endl;
+		return false;
+	}
+
+	if ((pid = fork()) == -1) {
+		std::cout << "Could not fork" << endl;
+		return false;
+	}
+
+	if (pid == 0) {
+		dup2 (link[1], STDOUT_FILENO);
+		close(link[0]);
+		close(link[1]);
+		execl("/usr/bin/python", "python", "/home/pi/fast_worker/lib/tl_monitor.py", (char *)0);
+		std::cout << "Could not fork" << endl;
+		exit(-1);
+	} else {
+		close(link[1]);
+		int nbytes = read(link[0], answer->content, sizeof(answer->content));
+		answer->content[nbytes] = 0;
+		waitpid(pid, NULL, 0);
+	  }
 	answer->length = strlen(answer->content);
 	std::cout << __func__ << "(). Sending '" << answer->content << "'" << endl;
 	return true;

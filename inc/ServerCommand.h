@@ -35,6 +35,7 @@ public:
 	static bool commandPing(LonetSIM808 *lonet, server_answer_t *answer);
 	static bool commandBattery(LonetSIM808 *lonet, server_answer_t *answer);
 	static bool commandLocation(LonetSIM808 *lonet, server_answer_t *answer);
+	static bool commandTimelapseStatus(LonetSIM808 *lonet, server_answer_t *answer);
 
 
 protected:

@@ -148,6 +148,7 @@ int main(int argc, char **argv)
 		server.commandRegister("ping", &ServerCommand::commandPing);
 		server.commandRegister("battery", &ServerCommand::commandBattery);
 		server.commandRegister("location", &ServerCommand::commandLocation);
+		server.commandRegister("status", &ServerCommand::commandTimelapseStatus);
 		lonet.smsCallbackInstall(sms_callback);
 		lonet.smsUpdateList(false);
 
